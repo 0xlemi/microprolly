@@ -1,8 +1,8 @@
-# Design Document: Versioned Key-Value Store
+# Design Document: MicroProlly
 
 ## Overview
 
-This document describes the design of a versioned key-value store implemented in Go. The system provides Git-like version control for data using a Prolly Tree (Probabilistic B-Tree) as the core data structure. The Prolly Tree combines B-Tree efficiency with Merkle Tree properties through content-based chunking via rolling hash.
+This document describes the design of MicroProlly, a versioned key-value store implemented in Go. The system provides Git-like version control for data using a Prolly Tree (Probabilistic B-Tree) as the core data structure. The Prolly Tree combines B-Tree efficiency with Merkle Tree properties through content-based chunking via rolling hash.
 
 The architecture follows a layered approach:
 1. **Storage Layer**: Content-addressed storage (CAS) for persistence

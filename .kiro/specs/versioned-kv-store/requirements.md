@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This document specifies the requirements for a versioned key-value store implemented in Go. The system provides Git-like version control capabilities for data, enabling time-travel queries, efficient diffs, and structural sharing through content-addressed storage. The core data structure is a Prolly Tree (Probabilistic B-Tree), which combines the efficiency of B-Trees with the history-independence of Merkle Trees.
+This document specifies the requirements for MicroProlly, a versioned key-value store implemented in Go. The system provides Git-like version control capabilities for data, enabling time-travel queries, efficient diffs, and structural sharing through content-addressed storage. The core data structure is a Prolly Tree (Probabilistic B-Tree), which combines the efficiency of B-Trees with the history-independence of Merkle Trees.
 
 This is a learning-focused project designed to deeply understand how "Git for Data" systems like Dolt work, while producing a useful embedded database engine.
 

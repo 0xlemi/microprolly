@@ -1,7 +1,7 @@
 # Implementation Plan
 
-- [ ] 1. Set up project structure and core types
-  - Initialize Go module with `go mod init`
+- [x] 1. Set up project structure and core types
+  - Initialize Go module with `go mod init microprolly`
   - Create directory structure: `pkg/cas`, `pkg/chunker`, `pkg/tree`, `pkg/store`
   - Define core types: `Hash`, `KVPair`, `Node`, `Commit` in `pkg/types/types.go`
   - Set up testing framework with `rapid` dependency
