@@ -1,0 +1,176 @@
+# Implementation Plan
+
+- [ ] 1. Set up project structure and core types
+  - Initialize Go module with `go mod init`
+  - Create directory structure: `pkg/cas`, `pkg/chunker`, `pkg/tree`, `pkg/store`
+  - Define core types: `Hash`, `KVPair`, `Node`, `Commit` in `pkg/types/types.go`
+  - Set up testing framework with `rapid` dependency
+  - _Requirements: All_
+
+- [ ] 2. Implement Content-Addressed Storage (CAS)
+  - [ ] 2.1 Implement CAS interface and file-based storage
+    - Create `pkg/cas/cas.go` with `Write`, `Read`, `Exists`, `Close` methods
+    - Implement SHA-256 hashing for content addressing
+    - Use two-level directory structure (`objects/ab/cdef...`) for scalability
+    - Implement atomic writes using temp file + rename pattern
+    - _Requirements: 4.1, 4.2, 4.3, 4.4, 9.1_
+  - [ ] 2.2 Write property test for CAS round-trip
+    - **Property 7: CAS Write-Read Round-Trip**
+    - **Validates: Requirements 4.1, 4.2, 4.3, 4.5**
+
+- [ ] 3. Implement Node Serialization
+  - [ ] 3.1 Implement binary serialization for LeafNode and InternalNode
+    - Create `pkg/tree/serialize.go` with `Serialize` and `Deserialize` functions
+    - Use big-endian encoding for determinism
+    - Include node type byte prefix (0x01 for leaf, 0x02 for internal)
+    - _Requirements: 10.1, 10.2, 10.3, 10.4_
+  - [ ] 3.2 Write property test for node serialization determinism
+    - **Property 17: Node Serialization Determinism**
+    - **Validates: Requirements 10.1, 10.2, 10.4**
+  - [ ] 3.3 Write property test for node serialization round-trip
+    - **Property 18: Node Serialization Round-Trip**
+    - **Validates: Requirements 10.3**
+
+- [ ] 4. Implement Rolling Hash Chunker
+  - [ ] 4.1 Implement Buzhash rolling hash algorithm
+    - Create `pkg/chunker/buzhash.go` with rolling hash computation
+    - Implement boundary detection using `hash % targetSize == 0`
+    - Add min/max chunk size constraints
+    - _Requirements: 2.1, 2.2_
+  - [ ] 4.2 Implement KV pair serialization for chunking
+    - Create `pkg/chunker/serialize.go` for deterministic KV pair encoding
+    - Implement corresponding deserialization
+    - _Requirements: 2.4, 2.5_
+  - [ ] 4.3 Write property test for KV pair serialization determinism
+    - **Property 4: KV Pair Serialization Determinism**
+    - **Validates: Requirements 2.4**
+  - [ ] 4.4 Write property test for KV pair serialization round-trip
+    - **Property 5: KV Pair Serialization Round-Trip**
+    - **Validates: Requirements 2.5**
+  - [ ] 4.5 Implement Chunker that groups KV pairs by boundaries
+    - Create `pkg/chunker/chunker.go` with `Chunk(pairs []KVPair) [][]KVPair`
+    - _Requirements: 2.1, 2.2, 2.3_
+  - [ ] 4.6 Write property test for chunk boundary stability
+    - **Property 3: Chunk Boundary Stability**
+    - **Validates: Requirements 2.3**
+
+- [ ] 5. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 6. Implement Prolly Tree Builder
+  - [ ] 6.1 Implement bottom-up tree construction
+    - Create `pkg/tree/builder.go` with `Build(pairs []KVPair) (Hash, error)`
+    - Build leaf nodes from chunked KV pairs
+    - Recursively build internal nodes until single root
+    - Store all nodes in CAS during construction
+    - _Requirements: 3.1, 3.2, 3.3_
+  - [ ] 6.2 Write property test for tree construction determinism
+    - **Property 6: Tree Construction Determinism**
+    - **Validates: Requirements 3.4**
+
+- [ ] 7. Implement Tree Traverser
+  - [ ] 7.1 Implement key lookup in Prolly Tree
+    - Create `pkg/tree/traverser.go` with `Get(rootHash Hash, key []byte) ([]byte, error)`
+    - Traverse from root to leaf using binary search within nodes
+    - Load nodes from CAS on demand
+    - _Requirements: 3.5_
+  - [ ] 7.2 Implement GetAll for tree iteration
+    - Add `GetAll(rootHash Hash) ([]KVPair, error)` for full tree traversal
+    - Return all KV pairs in sorted order
+    - _Requirements: 3.5_
+
+- [ ] 8. Implement Commit Manager
+  - [ ] 8.1 Implement Commit struct and JSON serialization
+    - Create `pkg/store/commit.go` with Commit type
+    - Implement JSON marshal/unmarshal for commits
+    - _Requirements: 5.4, 5.5_
+  - [ ] 8.2 Write property test for commit serialization round-trip
+    - **Property 10: Commit Serialization Round-Trip**
+    - **Validates: Requirements 5.5**
+  - [ ] 8.3 Implement CommitManager for creating and retrieving commits
+    - Add `CreateCommit`, `GetCommit`, `Log` methods
+    - Store commits in CAS
+    - _Requirements: 5.1, 5.2, 5.3_
+  - [ ] 8.4 Write property test for commit structure completeness
+    - **Property 8: Commit Structure Completeness**
+    - **Validates: Requirements 5.1, 5.2**
+  - [ ] 8.5 Write property test for commit history chain integrity
+    - **Property 9: Commit History Chain Integrity**
+    - **Validates: Requirements 5.3**
+
+- [ ] 9. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 10. Implement Diff Engine
+  - [ ] 10.1 Implement tree diff algorithm
+    - Create `pkg/tree/diff.go` with `Diff(hashA, hashB Hash) (DiffResult, error)`
+    - Compare root hashes first (early exit if identical)
+    - Recursively compare only differing subtrees
+    - Collect added, modified, and deleted keys
+    - _Requirements: 7.1, 7.2, 7.3, 7.4_
+  - [ ] 10.2 Write property test for diff correctness
+    - **Property 13: Diff Correctness**
+    - **Validates: Requirements 7.1**
+  - [ ] 10.3 Write property test for identical trees empty diff
+    - **Property 14: Identical Trees Have Empty Diff**
+    - **Validates: Requirements 7.2**
+
+- [ ] 11. Implement Main Store API
+  - [ ] 11.1 Implement Store with working state management
+    - Create `pkg/store/store.go` with in-memory working state (map)
+    - Implement `Put`, `Get`, `Delete` for working state
+    - Track HEAD commit reference
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
+  - [ ] 11.2 Write property test for KV put-get round-trip
+    - **Property 1: KV Put-Get Round-Trip**
+    - **Validates: Requirements 1.1, 1.2**
+  - [ ] 11.3 Write property test for KV delete removes key
+    - **Property 2: KV Delete Removes Key**
+    - **Validates: Requirements 1.4**
+  - [ ] 11.4 Implement Commit operation
+    - Build Prolly Tree from working state
+    - Create commit with tree root hash
+    - Update HEAD reference
+    - _Requirements: 5.1, 5.2_
+  - [ ] 11.5 Implement time-travel GetAt operation
+    - Add `GetAt(key []byte, commitHash Hash) ([]byte, error)`
+    - Load tree from commit and traverse
+    - _Requirements: 6.1, 6.2, 6.3_
+  - [ ] 11.6 Write property test for time-travel get correctness
+    - **Property 11: Time-Travel Get Correctness**
+    - **Validates: Requirements 6.1**
+  - [ ] 11.7 Implement Checkout operation
+    - Add `Checkout(commitHash Hash) error`
+    - Load all KV pairs from commit's tree into working state
+    - Update HEAD reference
+    - _Requirements: 6.4_
+  - [ ] 11.8 Write property test for checkout restores state
+    - **Property 12: Checkout Restores State**
+    - **Validates: Requirements 6.4**
+  - [ ] 11.9 Implement Diff and Log operations
+    - Wire up DiffEngine and CommitManager to Store API
+    - _Requirements: 7.1, 5.3_
+
+- [ ] 12. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 13. Implement Structural Sharing Verification
+  - [ ] 13.1 Add node tracking to verify structural sharing
+    - Instrument CAS to track write operations
+    - Verify node reuse across versions
+    - _Requirements: 8.1, 8.2, 8.3_
+  - [ ] 13.2 Write property test for structural sharing efficiency
+    - **Property 15: Structural Sharing Efficiency**
+    - **Validates: Requirements 8.1, 8.2, 8.3**
+
+- [ ] 14. Implement Persistence
+  - [ ] 14.1 Implement HEAD file persistence
+    - Store current HEAD commit hash in `HEAD` file
+    - Load HEAD on store initialization
+    - _Requirements: 9.2_
+  - [ ] 14.2 Write property test for persistence across restarts
+    - **Property 16: Persistence Across Restarts**
+    - **Validates: Requirements 9.2**
+
+- [ ] 15. Final Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
