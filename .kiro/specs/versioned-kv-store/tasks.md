@@ -18,16 +18,16 @@
     - **Property 7: CAS Write-Read Round-Trip**
     - **Validates: Requirements 4.1, 4.2, 4.3, 4.5**
 
-- [ ] 3. Implement Node Serialization
-  - [ ] 3.1 Implement binary serialization for LeafNode and InternalNode
+- [x] 3. Implement Node Serialization
+  - [x] 3.1 Implement binary serialization for LeafNode and InternalNode
     - Create `pkg/tree/serialize.go` with `Serialize` and `Deserialize` functions
     - Use big-endian encoding for determinism
     - Include node type byte prefix (0x01 for leaf, 0x02 for internal)
     - _Requirements: 10.1, 10.2, 10.3, 10.4_
-  - [ ] 3.2 Write property test for node serialization determinism
+  - [x] 3.2 Write property test for node serialization determinism
     - **Property 17: Node Serialization Determinism**
     - **Validates: Requirements 10.1, 10.2, 10.4**
-  - [ ] 3.3 Write property test for node serialization round-trip
+  - [x] 3.3 Write property test for node serialization round-trip
     - **Property 18: Node Serialization Round-Trip**
     - **Validates: Requirements 10.3**
 

@@ -5,6 +5,13 @@ import (
 	"encoding/hex"
 )
 
+// SerializerFunc is a function type for serializing nodes
+// This allows the tree package to inject its serialization implementation
+var (
+	SerializeLeafNodeFunc     func(*LeafNode) ([]byte, error)
+	SerializeInternalNodeFunc func(*InternalNode) ([]byte, error)
+)
+
 // Hash represents a SHA-256 hash (32 bytes)
 type Hash [32]byte
 
@@ -56,7 +63,10 @@ func (n *LeafNode) Hash() Hash {
 
 // Serialize converts the leaf node to bytes
 func (n *LeafNode) Serialize() ([]byte, error) {
-	// Placeholder - will be implemented in tree package
+	if SerializeLeafNodeFunc != nil {
+		return SerializeLeafNodeFunc(n)
+	}
+	// Fallback for testing or if tree package not initialized
 	return nil, nil
 }
 
@@ -82,7 +92,10 @@ func (n *InternalNode) Hash() Hash {
 
 // Serialize converts the internal node to bytes
 func (n *InternalNode) Serialize() ([]byte, error) {
-	// Placeholder - will be implemented in tree package
+	if SerializeInternalNodeFunc != nil {
+		return SerializeInternalNodeFunc(n)
+	}
+	// Fallback for testing or if tree package not initialized
 	return nil, nil
 }
 
