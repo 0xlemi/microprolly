@@ -7,14 +7,14 @@
   - Set up testing framework with `rapid` dependency
   - _Requirements: All_
 
-- [ ] 2. Implement Content-Addressed Storage (CAS)
-  - [ ] 2.1 Implement CAS interface and file-based storage
+- [x] 2. Implement Content-Addressed Storage (CAS)
+  - [x] 2.1 Implement CAS interface and file-based storage
     - Create `pkg/cas/cas.go` with `Write`, `Read`, `Exists`, `Close` methods
     - Implement SHA-256 hashing for content addressing
     - Use two-level directory structure (`objects/ab/cdef...`) for scalability
     - Implement atomic writes using temp file + rename pattern
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 9.1_
-  - [ ] 2.2 Write property test for CAS round-trip
+  - [x] 2.2 Write property test for CAS round-trip
     - **Property 7: CAS Write-Read Round-Trip**
     - **Validates: Requirements 4.1, 4.2, 4.3, 4.5**
 
