@@ -31,26 +31,26 @@
     - **Property 18: Node Serialization Round-Trip**
     - **Validates: Requirements 10.3**
 
-- [ ] 4. Implement Rolling Hash Chunker
-  - [ ] 4.1 Implement Buzhash rolling hash algorithm
+- [x] 4. Implement Rolling Hash Chunker
+  - [x] 4.1 Implement Buzhash rolling hash algorithm
     - Create `pkg/chunker/buzhash.go` with rolling hash computation
     - Implement boundary detection using `hash % targetSize == 0`
     - Add min/max chunk size constraints
     - _Requirements: 2.1, 2.2_
-  - [ ] 4.2 Implement KV pair serialization for chunking
+  - [x] 4.2 Implement KV pair serialization for chunking
     - Create `pkg/chunker/serialize.go` for deterministic KV pair encoding
     - Implement corresponding deserialization
     - _Requirements: 2.4, 2.5_
-  - [ ] 4.3 Write property test for KV pair serialization determinism
+  - [x] 4.3 Write property test for KV pair serialization determinism
     - **Property 4: KV Pair Serialization Determinism**
     - **Validates: Requirements 2.4**
-  - [ ] 4.4 Write property test for KV pair serialization round-trip
+  - [x] 4.4 Write property test for KV pair serialization round-trip
     - **Property 5: KV Pair Serialization Round-Trip**
     - **Validates: Requirements 2.5**
-  - [ ] 4.5 Implement Chunker that groups KV pairs by boundaries
+  - [x] 4.5 Implement Chunker that groups KV pairs by boundaries
     - Create `pkg/chunker/chunker.go` with `Chunk(pairs []KVPair) [][]KVPair`
     - _Requirements: 2.1, 2.2, 2.3_
-  - [ ] 4.6 Write property test for chunk boundary stability
+  - [x] 4.6 Write property test for chunk boundary stability
     - **Property 3: Chunk Boundary Stability**
     - **Validates: Requirements 2.3**
 
