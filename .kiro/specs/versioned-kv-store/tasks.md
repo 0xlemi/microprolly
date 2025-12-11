@@ -79,22 +79,22 @@
     - Return all KV pairs in sorted order
     - _Requirements: 3.5_
 
-- [ ] 8. Implement Commit Manager
-  - [ ] 8.1 Implement Commit struct and JSON serialization
+- [x] 8. Implement Commit Manager
+  - [x] 8.1 Implement Commit struct and JSON serialization
     - Create `pkg/store/commit.go` with Commit type
     - Implement JSON marshal/unmarshal for commits
     - _Requirements: 5.4, 5.5_
-  - [ ] 8.2 Write property test for commit serialization round-trip
+  - [x] 8.2 Write property test for commit serialization round-trip
     - **Property 10: Commit Serialization Round-Trip**
     - **Validates: Requirements 5.5**
-  - [ ] 8.3 Implement CommitManager for creating and retrieving commits
+  - [x] 8.3 Implement CommitManager for creating and retrieving commits
     - Add `CreateCommit`, `GetCommit`, `Log` methods
     - Store commits in CAS
     - _Requirements: 5.1, 5.2, 5.3_
-  - [ ] 8.4 Write property test for commit structure completeness
+  - [x] 8.4 Write property test for commit structure completeness
     - **Property 8: Commit Structure Completeness**
     - **Validates: Requirements 5.1, 5.2**
-  - [ ] 8.5 Write property test for commit history chain integrity
+  - [x] 8.5 Write property test for commit history chain integrity
     - **Property 9: Commit History Chain Integrity**
     - **Validates: Requirements 5.3**
 
