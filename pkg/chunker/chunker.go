@@ -64,9 +64,8 @@ func (c *BuzhashChunker) Chunk(pairs []types.KVPair) [][]types.KVPair {
 		// Add pair to current chunk
 		currentChunk = append(currentChunk, pair)
 
-		// Check if we should create a boundary (hasher handles min/max internally)
+		// Check if we should create a boundary
 		if hasher.IsBoundary() {
-			// Finalize current chunk
 			chunks = append(chunks, currentChunk)
 			currentChunk = nil
 			hasher.Reset()
@@ -76,6 +75,13 @@ func (c *BuzhashChunker) Chunk(pairs []types.KVPair) [][]types.KVPair {
 	// Don't forget the last chunk if it has any pairs
 	if len(currentChunk) > 0 {
 		chunks = append(chunks, currentChunk)
+	}
+
+	// Safety check: chunking must always make progress (reduce count)
+	// If we produced as many chunks as input items, merge everything into one
+	// This guarantees callers can use this in recursive algorithms without infinite loops
+	if len(chunks) >= len(pairs) {
+		return [][]types.KVPair{pairs}
 	}
 
 	return chunks

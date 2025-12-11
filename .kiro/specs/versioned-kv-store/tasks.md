@@ -68,13 +68,13 @@
     - **Property 6: Tree Construction Determinism**
     - **Validates: Requirements 3.4**
 
-- [ ] 7. Implement Tree Traverser
-  - [ ] 7.1 Implement key lookup in Prolly Tree
+- [x] 7. Implement Tree Traverser
+  - [x] 7.1 Implement key lookup in Prolly Tree
     - Create `pkg/tree/traverser.go` with `Get(rootHash Hash, key []byte) ([]byte, error)`
     - Traverse from root to leaf using binary search within nodes
     - Load nodes from CAS on demand
     - _Requirements: 3.5_
-  - [ ] 7.2 Implement GetAll for tree iteration
+  - [x] 7.2 Implement GetAll for tree iteration
     - Add `GetAll(rootHash Hash) ([]KVPair, error)` for full tree traversal
     - Return all KV pairs in sorted order
     - _Requirements: 3.5_

@@ -109,8 +109,13 @@ func (b *Buzhash) IsBoundary() bool {
 		return true
 	}
 
-	// Return true if any roll since last reset hit a boundary
-	return b.boundaryHit
+	// Check if boundary was hit and clear the flag
+	// This ensures we only report a boundary once per hit
+	if b.boundaryHit {
+		b.boundaryHit = false
+		return true
+	}
+	return false
 }
 
 // Count returns the number of bytes processed since last reset
