@@ -151,7 +151,7 @@
     - Wire up DiffEngine and CommitManager to Store API
     - _Requirements: 7.1, 5.3_
 
-- [ ] 12. Checkpoint - Ensure all tests pass
+- [x] 12. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 13. Implement Structural Sharing Verification

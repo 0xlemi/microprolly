@@ -160,168 +160,91 @@ func (d *DiffEngine) diffPairLists(pairsA, pairsB []types.KVPair, result *DiffRe
 
 // diffInternalNodes compares two internal nodes
 // Requirement 7.3, 7.4: Skip matching subtrees, recursively compare differing ones
+//
+// The algorithm handles the complex case where tree structure changes due to
+// content-defined chunking. When a single key is added/deleted, chunk boundaries
+// may shift, causing children to have different starting keys.
+//
+// Strategy: We use a merge-like algorithm that tracks which key ranges have been
+// processed. When children align (same starting key), we can compare them directly.
+// When they don't align, we need to carefully track which ranges overlap.
 func (d *DiffEngine) diffInternalNodes(nodeA, nodeB *types.InternalNode, result *DiffResult) error {
 	childrenA := nodeA.Children
 	childrenB := nodeB.Children
 
-	i, j := 0, 0
+	// Build a list of all unique boundary keys from both trees
+	// This helps us understand the key space partitioning
+	allKeys := make(map[string]bool)
+	for _, c := range childrenA {
+		allKeys[string(c.Key)] = true
+	}
+	for _, c := range childrenB {
+		allKeys[string(c.Key)] = true
+	}
 
-	for i < len(childrenA) && j < len(childrenB) {
-		// Determine the key ranges for comparison
-		keyA := childrenA[i].Key
-		keyB := childrenB[j].Key
-
-		// Get the upper bound keys (next child's key or nil if last)
-		var upperA, upperB []byte
-		if i+1 < len(childrenA) {
-			upperA = childrenA[i+1].Key
+	// If children align perfectly (same keys), use optimized path
+	if len(childrenA) == len(childrenB) {
+		aligned := true
+		for i := range childrenA {
+			if !bytes.Equal(childrenA[i].Key, childrenB[i].Key) {
+				aligned = false
+				break
+			}
 		}
-		if j+1 < len(childrenB) {
-			upperB = childrenB[j+1].Key
-		}
-
-		// Check if these children cover overlapping key ranges
-		cmpKeys := bytes.Compare(keyA, keyB)
-
-		if cmpKeys == 0 {
-			// Same starting key - compare these children
-			if childrenA[i].Hash == childrenB[j].Hash {
-				// Requirement 7.3: Skip subtrees with matching hashes
-				i++
-				j++
-				continue
-			}
-
-			// Hashes differ - recursively compare (Requirement 7.4)
-			childNodeA, err := d.loadNode(childrenA[i].Hash)
-			if err != nil {
-				return err
-			}
-			childNodeB, err := d.loadNode(childrenB[j].Hash)
-			if err != nil {
-				return err
-			}
-			if err := d.diffNodes(childNodeA, childNodeB, result); err != nil {
-				return err
-			}
-			i++
-			j++
-		} else if cmpKeys < 0 {
-			// Child A starts before child B
-			// Check if A's range overlaps with B
-			if upperA == nil || bytes.Compare(upperA, keyB) > 0 {
-				// Ranges overlap - need to compare at pair level
-				pairsA, err := d.collectPairsInRange(childrenA[i].Hash, keyA, upperA)
-				if err != nil {
-					return err
-				}
-				pairsB, err := d.collectPairsInRange(childrenB[j].Hash, keyB, upperB)
-				if err != nil {
-					return err
-				}
-
-				// Filter pairs from A that are before B's range
-				var beforeB []types.KVPair
-				var overlapA []types.KVPair
-				for _, p := range pairsA {
-					if bytes.Compare(p.Key, keyB) < 0 {
-						beforeB = append(beforeB, p)
-					} else {
-						overlapA = append(overlapA, p)
-					}
-				}
-
-				// Keys before B's range are deleted
-				for _, p := range beforeB {
-					result.Deleted = append(result.Deleted, copyBytes(p.Key))
-				}
-
-				// Compare overlapping portions
-				d.diffPairLists(overlapA, pairsB, result)
-				i++
-				j++
-			} else {
-				// A's range is entirely before B - all keys in A are deleted
-				pairs, err := d.collectAllPairsFromHash(childrenA[i].Hash)
-				if err != nil {
-					return err
-				}
-				for _, p := range pairs {
-					result.Deleted = append(result.Deleted, copyBytes(p.Key))
-				}
-				i++
-			}
-		} else {
-			// Child B starts before child A
-			// Check if B's range overlaps with A
-			if upperB == nil || bytes.Compare(upperB, keyA) > 0 {
-				// Ranges overlap - need to compare at pair level
-				pairsA, err := d.collectPairsInRange(childrenA[i].Hash, keyA, upperA)
-				if err != nil {
-					return err
-				}
-				pairsB, err := d.collectPairsInRange(childrenB[j].Hash, keyB, upperB)
-				if err != nil {
-					return err
-				}
-
-				// Filter pairs from B that are before A's range
-				var beforeA []types.KVPair
-				var overlapB []types.KVPair
-				for _, p := range pairsB {
-					if bytes.Compare(p.Key, keyA) < 0 {
-						beforeA = append(beforeA, p)
-					} else {
-						overlapB = append(overlapB, p)
-					}
-				}
-
-				// Keys before A's range are added
-				for _, p := range beforeA {
-					result.Added = append(result.Added, copyKVPair(p))
-				}
-
-				// Compare overlapping portions
-				d.diffPairLists(pairsA, overlapB, result)
-				i++
-				j++
-			} else {
-				// B's range is entirely before A - all keys in B are added
-				pairs, err := d.collectAllPairsFromHash(childrenB[j].Hash)
-				if err != nil {
-					return err
-				}
-				for _, p := range pairs {
-					result.Added = append(result.Added, copyKVPair(p))
-				}
-				j++
-			}
+		if aligned {
+			return d.diffAlignedChildren(childrenA, childrenB, result)
 		}
 	}
 
-	// Remaining children in A are deleted
-	for ; i < len(childrenA); i++ {
-		pairs, err := d.collectAllPairsFromHash(childrenA[i].Hash)
-		if err != nil {
-			return err
-		}
-		for _, p := range pairs {
-			result.Deleted = append(result.Deleted, copyBytes(p.Key))
-		}
+	// Children don't align - fall back to collecting all pairs and comparing
+	// This is correct but less efficient for the misaligned case
+	pairsA, err := d.collectAllPairsFromChildren(childrenA)
+	if err != nil {
+		return err
 	}
-
-	// Remaining children in B are added
-	for ; j < len(childrenB); j++ {
-		pairs, err := d.collectAllPairsFromHash(childrenB[j].Hash)
-		if err != nil {
-			return err
-		}
-		for _, p := range pairs {
-			result.Added = append(result.Added, copyKVPair(p))
-		}
+	pairsB, err := d.collectAllPairsFromChildren(childrenB)
+	if err != nil {
+		return err
 	}
-
+	d.diffPairLists(pairsA, pairsB, result)
 	return nil
+}
+
+// diffAlignedChildren handles the case where children have the same starting keys
+func (d *DiffEngine) diffAlignedChildren(childrenA, childrenB []types.ChildRef, result *DiffResult) error {
+	for i := range childrenA {
+		if childrenA[i].Hash == childrenB[i].Hash {
+			// Requirement 7.3: Skip subtrees with matching hashes
+			continue
+		}
+
+		// Hashes differ - recursively compare (Requirement 7.4)
+		childNodeA, err := d.loadNode(childrenA[i].Hash)
+		if err != nil {
+			return err
+		}
+		childNodeB, err := d.loadNode(childrenB[i].Hash)
+		if err != nil {
+			return err
+		}
+		if err := d.diffNodes(childNodeA, childNodeB, result); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// collectAllPairsFromChildren collects all KV pairs from a list of children
+func (d *DiffEngine) collectAllPairsFromChildren(children []types.ChildRef) ([]types.KVPair, error) {
+	var allPairs []types.KVPair
+	for _, child := range children {
+		pairs, err := d.collectAllPairsFromHash(child.Hash)
+		if err != nil {
+			return nil, err
+		}
+		allPairs = append(allPairs, pairs...)
+	}
+	return allPairs, nil
 }
 
 // collectAllPairs collects all KV pairs from a node recursively
@@ -354,12 +277,6 @@ func (d *DiffEngine) collectAllPairsFromHash(hash types.Hash) ([]types.KVPair, e
 		return nil, err
 	}
 	return d.collectAllPairs(node)
-}
-
-// collectPairsInRange collects pairs from a subtree (used for complex overlap cases)
-func (d *DiffEngine) collectPairsInRange(hash types.Hash, lower, upper []byte) ([]types.KVPair, error) {
-	// For simplicity, collect all pairs - the caller will filter as needed
-	return d.collectAllPairsFromHash(hash)
 }
 
 // copyBytes creates a copy of a byte slice
