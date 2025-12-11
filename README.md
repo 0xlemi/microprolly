@@ -20,6 +20,29 @@ Think of it as "Git for your data" - every change creates a new version, but unc
 - **Persistence**: All data stored on disk, survives restarts
 - **Atomic Writes**: Data integrity through temp file + rename pattern
 
+## How It Works
+
+MicroProlly uses a **Prolly Tree** (Probabilistic B-Tree) as its core data structure:
+
+1. **Content-Based Chunking**: Data is split into chunks using a Buzhash rolling hash, creating stable boundaries
+2. **Merkle Tree Properties**: Each node is identified by the SHA-256 hash of its content
+3. **Structural Sharing**: Unchanged subtrees have the same hash and are automatically reused
+
+When you change one key:
+```
+Version 1:          Version 2:
+    Root1               Root2 (new)
+    /    \              /    \
+   A      B    →       A      B2 (new)
+  / \    / \          / \    / \
+ L1 L2  L3 L4        L1 L2  L3 L4_new (changed)
+                     ↑  ↑   ↑
+                   reused! reused!
+```
+
+Only the path from the changed leaf to the root is rewritten. Everything else is shared.
+
+
 ## Installation
 
 ```bash
@@ -134,29 +157,7 @@ Run it with:
 go run examples/demo/main.go
 ```
 
-## How It Works
-
-MicroProlly uses a **Prolly Tree** (Probabilistic B-Tree) as its core data structure:
-
-1. **Content-Based Chunking**: Data is split into chunks using a Buzhash rolling hash, creating stable boundaries
-2. **Merkle Tree Properties**: Each node is identified by the SHA-256 hash of its content
-3. **Structural Sharing**: Unchanged subtrees have the same hash and are automatically reused
-
-When you change one key:
-```
-Version 1:          Version 2:
-    Root1               Root2 (new)
-    /    \              /    \
-   A      B    →       A      B2 (new)
-  / \    / \          / \    / \
- L1 L2  L3 L4        L1 L2  L3 L4_new (changed)
-                     ↑  ↑   ↑
-                   reused! reused!
-```
-
-Only the path from the changed leaf to the root is rewritten. Everything else is shared.
-
-### Architecture
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────┐
