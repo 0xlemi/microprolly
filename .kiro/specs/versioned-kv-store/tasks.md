@@ -115,39 +115,39 @@
     - **Property 14: Identical Trees Have Empty Diff**
     - **Validates: Requirements 7.2**
 
-- [ ] 11. Implement Main Store API
-  - [ ] 11.1 Implement Store with working state management
+- [x] 11. Implement Main Store API
+  - [x] 11.1 Implement Store with working state management
     - Create `pkg/store/store.go` with in-memory working state (map)
     - Implement `Put`, `Get`, `Delete` for working state
     - Track HEAD commit reference
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
-  - [ ] 11.2 Write property test for KV put-get round-trip
+  - [x] 11.2 Write property test for KV put-get round-trip
     - **Property 1: KV Put-Get Round-Trip**
     - **Validates: Requirements 1.1, 1.2**
-  - [ ] 11.3 Write property test for KV delete removes key
+  - [x] 11.3 Write property test for KV delete removes key
     - **Property 2: KV Delete Removes Key**
     - **Validates: Requirements 1.4**
-  - [ ] 11.4 Implement Commit operation
+  - [x] 11.4 Implement Commit operation
     - Build Prolly Tree from working state
     - Create commit with tree root hash
     - Update HEAD reference
     - _Requirements: 5.1, 5.2_
-  - [ ] 11.5 Implement time-travel GetAt operation
+  - [x] 11.5 Implement time-travel GetAt operation
     - Add `GetAt(key []byte, commitHash Hash) ([]byte, error)`
     - Load tree from commit and traverse
     - _Requirements: 6.1, 6.2, 6.3_
-  - [ ] 11.6 Write property test for time-travel get correctness
+  - [x] 11.6 Write property test for time-travel get correctness
     - **Property 11: Time-Travel Get Correctness**
     - **Validates: Requirements 6.1**
-  - [ ] 11.7 Implement Checkout operation
+  - [x] 11.7 Implement Checkout operation
     - Add `Checkout(commitHash Hash) error`
     - Load all KV pairs from commit's tree into working state
     - Update HEAD reference
     - _Requirements: 6.4_
-  - [ ] 11.8 Write property test for checkout restores state
+  - [x] 11.8 Write property test for checkout restores state
     - **Property 12: Checkout Restores State**
     - **Validates: Requirements 6.4**
-  - [ ] 11.9 Implement Diff and Log operations
+  - [x] 11.9 Implement Diff and Log operations
     - Wire up DiffEngine and CommitManager to Store API
     - _Requirements: 7.1, 5.3_
 
