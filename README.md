@@ -11,15 +11,6 @@ MicroProlly is an embedded database that combines:
 
 Think of it as "Git for your data" - every change creates a new version, but unchanged data is shared between versions automatically.
 
-## Features
-
-- **Time Travel**: Query data as it existed at any previous commit
-- **Efficient Diffs**: Compare two versions and see exactly what changed
-- **Structural Sharing**: Change 1 key in 1 million? Only ~4 nodes written, not 1 million
-- **Content-Addressed Storage**: Automatic deduplication via SHA-256 hashing
-- **Persistence**: All data stored on disk, survives restarts
-- **Atomic Writes**: Data integrity through temp file + rename pattern
-
 ## How It Works
 
 MicroProlly uses a **Prolly Tree** (Probabilistic B-Tree) as its core data structure:
@@ -41,6 +32,15 @@ Version 1:          Version 2:
 ```
 
 Only the path from the changed leaf to the root is rewritten. Everything else is shared.
+
+## Features
+
+- **Time Travel**: Query data as it existed at any previous commit
+- **Efficient Diffs**: Compare two versions and see exactly what changed
+- **Structural Sharing**: Change 1 key in 1 million? Only ~4 nodes written, not 1 million
+- **Content-Addressed Storage**: Automatic deduplication via SHA-256 hashing
+- **Persistence**: All data stored on disk, survives restarts
+- **Atomic Writes**: Data integrity through temp file + rename pattern
 
 
 ## Installation
@@ -144,39 +144,11 @@ fmt.Println("Deleted:", len(diff.Deleted))
 
 ## Complete Example
 
-See [examples/demo/main.go](examples/demo/main.go) for a full working example that demonstrates:
-- Basic CRUD operations
-- Committing changes
-- Time-travel queries
-- Diffing between versions
-- Viewing commit history
-- Checkout to restore old state
+See [examples/demo/main.go](examples/demo/main.go) for a full working example:
 
 Run it with:
 ```bash
 go run examples/demo/main.go
-```
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────┐
-│                   Store API                      │
-│         (Put, Get, Commit, Diff, Log)           │
-├─────────────────────────────────────────────────┤
-│              Version Layer                       │
-│        (CommitManager, History)                  │
-├─────────────────────────────────────────────────┤
-│                Tree Layer                        │
-│  (TreeBuilder, TreeTraverser, DiffEngine)       │
-│           (Rolling Hash Chunker)                 │
-├─────────────────────────────────────────────────┤
-│           Content-Addressed Storage              │
-│              (SHA-256 hashing)                   │
-├─────────────────────────────────────────────────┤
-│              File System                         │
-│         (objects/ab/cdef..., HEAD)              │
-└─────────────────────────────────────────────────┘
 ```
 
 ## Project Structure
@@ -219,16 +191,6 @@ go test ./... -v
 # Run specific package tests
 go test ./pkg/store -v
 ```
-
-### Verified Properties
-
-The test suite validates 18 correctness properties including:
-- KV Put-Get round-trip consistency
-- Serialization determinism and round-trips
-- Tree construction determinism
-- Diff correctness
-- Structural sharing efficiency
-- Persistence across restarts
 
 ## Why MicroProlly?
 
