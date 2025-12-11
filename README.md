@@ -57,6 +57,17 @@ cd microprolly
 go mod tidy
 ```
 
+## Complete Example
+
+See [examples/demo/main.go](examples/demo/main.go) for a full working example:
+
+Run it with:
+```bash
+go run examples/demo/main.go
+```
+
+
+
 ## Quick Start
 
 ```go
@@ -140,15 +151,6 @@ diff, err := db.Diff(commitA, commitB)
 fmt.Println("Added:", len(diff.Added))
 fmt.Println("Modified:", len(diff.Modified))
 fmt.Println("Deleted:", len(diff.Deleted))
-```
-
-## Complete Example
-
-See [examples/demo/main.go](examples/demo/main.go) for a full working example:
-
-Run it with:
-```bash
-go run examples/demo/main.go
 ```
 
 ## Project Structure
