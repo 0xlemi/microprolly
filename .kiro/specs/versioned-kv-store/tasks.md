@@ -98,20 +98,20 @@
     - **Property 9: Commit History Chain Integrity**
     - **Validates: Requirements 5.3**
 
-- [ ] 9. Checkpoint - Ensure all tests pass
+- [x] 9. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 10. Implement Diff Engine
-  - [ ] 10.1 Implement tree diff algorithm
+- [x] 10. Implement Diff Engine
+  - [x] 10.1 Implement tree diff algorithm
     - Create `pkg/tree/diff.go` with `Diff(hashA, hashB Hash) (DiffResult, error)`
     - Compare root hashes first (early exit if identical)
     - Recursively compare only differing subtrees
     - Collect added, modified, and deleted keys
     - _Requirements: 7.1, 7.2, 7.3, 7.4_
-  - [ ] 10.2 Write property test for diff correctness
+  - [x] 10.2 Write property test for diff correctness
     - **Property 13: Diff Correctness**
     - **Validates: Requirements 7.1**
-  - [ ] 10.3 Write property test for identical trees empty diff
+  - [x] 10.3 Write property test for identical trees empty diff
     - **Property 14: Identical Trees Have Empty Diff**
     - **Validates: Requirements 7.2**
 
