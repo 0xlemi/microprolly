@@ -54,17 +54,17 @@
     - **Property 3: Chunk Boundary Stability**
     - **Validates: Requirements 2.3**
 
-- [ ] 5. Checkpoint - Ensure all tests pass
+- [x] 5. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 6. Implement Prolly Tree Builder
-  - [ ] 6.1 Implement bottom-up tree construction
+- [x] 6. Implement Prolly Tree Builder
+  - [x] 6.1 Implement bottom-up tree construction
     - Create `pkg/tree/builder.go` with `Build(pairs []KVPair) (Hash, error)`
     - Build leaf nodes from chunked KV pairs
     - Recursively build internal nodes until single root
     - Store all nodes in CAS during construction
     - _Requirements: 3.1, 3.2, 3.3_
-  - [ ] 6.2 Write property test for tree construction determinism
+  - [x] 6.2 Write property test for tree construction determinism
     - **Property 6: Tree Construction Determinism**
     - **Validates: Requirements 3.4**
 
