@@ -2,7 +2,10 @@ package store
 
 import (
 	"bytes"
+	"encoding/hex"
 	"errors"
+	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 
@@ -41,9 +44,13 @@ type Store struct {
 
 	// HEAD commit reference
 	head types.Hash
+
+	// Data directory for HEAD file persistence
+	dataDir string
 }
 
 // NewStore creates a new Store with the given CAS directory
+// Requirements: 9.1, 9.2
 func NewStore(dataDir string) (*Store, error) {
 	// Initialize CAS
 	casStore, err := cas.NewFileCAS(dataDir)
@@ -51,7 +58,25 @@ func NewStore(dataDir string) (*Store, error) {
 		return nil, err
 	}
 
-	return NewStoreWithCAS(casStore), nil
+	store := NewStoreWithCAS(casStore)
+	store.dataDir = dataDir
+
+	// Load HEAD from file if it exists
+	if err := store.loadHead(); err != nil {
+		// If HEAD file doesn't exist, that's fine - start with ZeroHash
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
+	}
+
+	// If we have a HEAD commit, load its state into working state
+	if store.head != ZeroHash {
+		if err := store.loadWorkingStateFromHead(); err != nil {
+			return nil, err
+		}
+	}
+
+	return store, nil
 }
 
 // NewStoreWithCAS creates a new Store with an existing CAS instance
@@ -158,8 +183,122 @@ func (s *Store) Close() error {
 	return s.cas.Close()
 }
 
+// headFilePath returns the path to the HEAD file
+func (s *Store) headFilePath() string {
+	return filepath.Join(s.dataDir, "HEAD")
+}
+
+// loadHead loads the HEAD commit hash from the HEAD file
+// Requirements: 9.2
+func (s *Store) loadHead() error {
+	if s.dataDir == "" {
+		return nil // No persistence for in-memory stores
+	}
+
+	data, err := os.ReadFile(s.headFilePath())
+	if err != nil {
+		return err
+	}
+
+	// HEAD file contains hex-encoded hash
+	hashStr := string(bytes.TrimSpace(data))
+	if hashStr == "" {
+		s.head = ZeroHash
+		return nil
+	}
+
+	hashBytes, err := hex.DecodeString(hashStr)
+	if err != nil {
+		return err
+	}
+
+	if len(hashBytes) != 32 {
+		return errors.New("invalid HEAD file: hash must be 32 bytes")
+	}
+
+	copy(s.head[:], hashBytes)
+	return nil
+}
+
+// saveHead persists the HEAD commit hash to the HEAD file
+// Requirements: 9.2, 9.3
+func (s *Store) saveHead() error {
+	if s.dataDir == "" {
+		return nil // No persistence for in-memory stores
+	}
+
+	headPath := s.headFilePath()
+
+	// Atomic write: write to temp file, sync, then rename
+	tmpFile, err := os.CreateTemp(s.dataDir, ".HEAD-tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmpFile.Name()
+
+	// Write hex-encoded hash
+	_, err = tmpFile.WriteString(s.head.String() + "\n")
+	if err != nil {
+		tmpFile.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+
+	// Sync to ensure data is written to disk
+	if err := tmpFile.Sync(); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpPath)
+		return err
+	}
+
+	// Close before rename
+	if err := tmpFile.Close(); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+
+	// Atomic rename
+	if err := os.Rename(tmpPath, headPath); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
+
+	return nil
+}
+
+// loadWorkingStateFromHead loads the working state from the current HEAD commit
+func (s *Store) loadWorkingStateFromHead() error {
+	if s.head == ZeroHash {
+		return nil
+	}
+
+	// Get the commit to find its root hash
+	commit, err := s.commitMgr.GetCommit(s.head)
+	if err != nil {
+		return err
+	}
+
+	// Load all KV pairs from the commit's tree
+	pairs, err := s.traverser.GetAll(commit.RootHash)
+	if err != nil {
+		return err
+	}
+
+	// Populate working state with commit's data
+	s.workingState = make(map[string][]byte)
+	for _, pair := range pairs {
+		keyCopy := make([]byte, len(pair.Key))
+		copy(keyCopy, pair.Key)
+		valueCopy := make([]byte, len(pair.Value))
+		copy(valueCopy, pair.Value)
+		s.workingState[string(keyCopy)] = valueCopy
+	}
+
+	return nil
+}
+
 // Commit creates a new commit with the current working state
-// Requirements: 5.1, 5.2
+// Requirements: 5.1, 5.2, 9.2
 func (s *Store) Commit(message string) (types.Hash, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -181,6 +320,11 @@ func (s *Store) Commit(message string) (types.Hash, error) {
 
 	// Update HEAD reference
 	s.head = commitHash
+
+	// Persist HEAD to disk
+	if err := s.saveHead(); err != nil {
+		return types.Hash{}, err
+	}
 
 	return commitHash, nil
 }
@@ -214,7 +358,7 @@ func (s *Store) GetAt(key []byte, commitHash types.Hash) ([]byte, error) {
 }
 
 // Checkout sets the working state to match a specific commit's data
-// Requirements: 6.4
+// Requirements: 6.4, 9.2
 func (s *Store) Checkout(commitHash types.Hash) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -244,6 +388,11 @@ func (s *Store) Checkout(commitHash types.Hash) error {
 
 	// Update HEAD reference
 	s.head = commitHash
+
+	// Persist HEAD to disk
+	if err := s.saveHead(); err != nil {
+		return err
+	}
 
 	return nil
 }

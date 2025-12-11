@@ -393,3 +393,113 @@ func TestStore_DiffIdenticalCommits(t *testing.T) {
 			len(diff.Added), len(diff.Modified), len(diff.Deleted))
 	}
 }
+
+// TestProperty_PersistenceAcrossRestarts tests Property 16: Persistence Across Restarts
+// **Feature: versioned-kv-store, Property 16: Persistence Across Restarts**
+// **Validates: Requirements 9.2**
+//
+// For any store with committed data, closing and reopening the store SHALL restore
+// the HEAD commit and all accessible history.
+func TestProperty_PersistenceAcrossRestarts(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		// Create a temporary directory for the store
+		tmpDir, err := os.MkdirTemp("", "persistence-test-*")
+		if err != nil {
+			rt.Fatalf("Failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tmpDir)
+
+		// Generate random key-value pairs
+		numPairs := rapid.IntRange(1, 10).Draw(rt, "numPairs")
+		pairs := make(map[string][]byte)
+		for i := 0; i < numPairs; i++ {
+			key := genNonEmptyBytes(rt, "key")
+			value := rapid.SliceOf(rapid.Byte()).Draw(rt, "value")
+			pairs[string(key)] = value
+		}
+
+		// Create store, add data, and commit
+		store1, err := NewStore(tmpDir)
+		if err != nil {
+			rt.Fatalf("Failed to create store: %v", err)
+		}
+
+		for keyStr, value := range pairs {
+			err := store1.Put([]byte(keyStr), value)
+			if err != nil {
+				rt.Fatalf("Put failed: %v", err)
+			}
+		}
+
+		commitHash, err := store1.Commit("test commit")
+		if err != nil {
+			rt.Fatalf("Commit failed: %v", err)
+		}
+
+		// Get the log before closing
+		logBefore, err := store1.Log()
+		if err != nil {
+			rt.Fatalf("Log failed: %v", err)
+		}
+
+		// Close the store
+		err = store1.Close()
+		if err != nil {
+			rt.Fatalf("Close failed: %v", err)
+		}
+
+		// Reopen the store from the same directory
+		store2, err := NewStore(tmpDir)
+		if err != nil {
+			rt.Fatalf("Failed to reopen store: %v", err)
+		}
+		defer store2.Close()
+
+		// Verify HEAD is restored
+		if store2.Head() != commitHash {
+			rt.Fatalf("HEAD not restored: got %s, want %s", store2.Head().String(), commitHash.String())
+		}
+
+		// Verify all key-value pairs are accessible
+		for keyStr, expectedValue := range pairs {
+			retrieved, err := store2.Get([]byte(keyStr))
+			if err != nil {
+				rt.Fatalf("Get key %q after restart failed: %v", keyStr, err)
+			}
+			if len(retrieved) != len(expectedValue) {
+				rt.Fatalf("Value length mismatch for key %q: got %d, want %d", keyStr, len(retrieved), len(expectedValue))
+			}
+			for i := range expectedValue {
+				if retrieved[i] != expectedValue[i] {
+					rt.Fatalf("Value mismatch for key %q at byte %d", keyStr, i)
+				}
+			}
+		}
+
+		// Verify commit history is accessible
+		logAfter, err := store2.Log()
+		if err != nil {
+			rt.Fatalf("Log after restart failed: %v", err)
+		}
+
+		if len(logAfter) != len(logBefore) {
+			rt.Fatalf("Log length mismatch: got %d, want %d", len(logAfter), len(logBefore))
+		}
+
+		// Verify each commit in the log matches
+		for i := range logBefore {
+			if logAfter[i].RootHash != logBefore[i].RootHash {
+				rt.Fatalf("Commit %d RootHash mismatch", i)
+			}
+			if logAfter[i].Message != logBefore[i].Message {
+				rt.Fatalf("Commit %d Message mismatch", i)
+			}
+			if logAfter[i].Parent != logBefore[i].Parent {
+				rt.Fatalf("Commit %d Parent mismatch", i)
+			}
+			if logAfter[i].Timestamp != logBefore[i].Timestamp {
+				rt.Fatalf("Commit %d Timestamp mismatch", i)
+			}
+		}
+	})
+}

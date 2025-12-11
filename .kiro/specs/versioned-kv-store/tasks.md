@@ -163,12 +163,12 @@
     - **Property 15: Structural Sharing Efficiency**
     - **Validates: Requirements 8.1, 8.2, 8.3**
 
-- [ ] 14. Implement Persistence
-  - [ ] 14.1 Implement HEAD file persistence
+- [x] 14. Implement Persistence
+  - [x] 14.1 Implement HEAD file persistence
     - Store current HEAD commit hash in `HEAD` file
     - Load HEAD on store initialization
     - _Requirements: 9.2_
-  - [ ] 14.2 Write property test for persistence across restarts
+  - [x] 14.2 Write property test for persistence across restarts
     - **Property 16: Persistence Across Restarts**
     - **Validates: Requirements 9.2**
 
