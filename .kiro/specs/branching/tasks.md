@@ -1,0 +1,113 @@
+# Implementation Plan
+
+- [ ] 1. Implement Branch Manager Core
+  - [ ] 1.1 Create branch name validation
+    - Create `pkg/branch/validate.go` with `ValidateBranchName(name string) error`
+    - Implement validation rules: non-empty, no invalid characters, no reserved names
+    - _Requirements: 1.4_
+  - [ ] 1.2 Write property test for invalid branch name rejection
+    - **Property 3: Invalid Branch Name Rejection**
+    - **Validates: Requirements 1.4**
+  - [ ] 1.3 Implement BranchManager struct and basic operations
+    - Create `pkg/branch/manager.go` with BranchManager struct
+    - Implement `CreateBranch(name, commitHash)` with atomic file writes
+    - Implement `GetBranch(name)` to read branch reference
+    - Implement `BranchExists(name)` to check existence
+    - _Requirements: 1.1, 1.2, 1.5, 2.2_
+  - [ ] 1.4 Write property test for branch creation round-trip
+    - **Property 1: Branch Creation Round-Trip**
+    - **Validates: Requirements 1.1, 1.2, 2.2**
+  - [ ] 1.5 Implement branch listing and deletion
+    - Implement `ListBranches()` to list all branches in refs/heads/
+    - Implement `DeleteBranch(name)` to remove branch reference
+    - Implement `UpdateBranch(name, commitHash)` for advancing branches
+    - _Requirements: 2.1, 4.1, 4.4_
+  - [ ] 1.6 Write property test for branch listing completeness
+    - **Property 2: Branch Listing Completeness**
+    - **Validates: Requirements 2.1**
+  - [ ] 1.7 Write property test for branch deletion
+    - **Property 4: Branch Deletion Removes Branch**
+    - **Validates: Requirements 4.1, 4.4**
+
+- [ ] 2. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 3. Implement HEAD Manager
+  - [ ] 3.1 Implement HeadState struct and HEAD file parsing
+    - Create `pkg/branch/head.go` with HeadState struct
+    - Implement `parseHeadFile(content)` to parse HEAD file format
+    - Handle both "ref: refs/heads/name" and raw hash formats
+    - _Requirements: 7.1, 7.2_
+  - [ ] 3.2 Implement HeadManager struct and operations
+    - Create HeadManager struct with reference to BranchManager
+    - Implement `GetHead()` to return current HEAD state
+    - Implement `GetHeadCommit()` to resolve HEAD to commit hash
+    - Implement `SetHeadToBranch(name)` for attached HEAD
+    - Implement `SetHeadToCommit(hash)` for detached HEAD
+    - _Requirements: 2.4, 7.1, 7.2, 7.3, 7.4_
+  - [ ] 3.3 Write property test for HEAD file format correctness
+    - **Property 10: HEAD File Format Correctness**
+    - **Validates: Requirements 7.1, 7.2**
+  - [ ] 3.4 Write property test for detach head
+    - **Property 11: Detach Head Sets Correct State**
+    - **Validates: Requirements 7.3**
+
+- [ ] 4. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 5. Integrate Branching with Store API
+  - [ ] 5.1 Add BranchManager and HeadManager to Store
+    - Update `pkg/store/store.go` to include BranchManager and HeadManager
+    - Initialize refs/heads/ directory on store creation
+    - Create default "main" branch on first initialization
+    - Load existing branches and HEAD on store open
+    - _Requirements: 6.1, 6.2_
+  - [ ] 5.2 Implement Store branch creation methods
+    - Implement `CreateBranch(name)` - create at current HEAD
+    - Implement `CreateBranchAt(name, commitHash)` - create at specific commit
+    - _Requirements: 1.1, 1.2, 1.3_
+  - [ ] 5.3 Implement Store branch switching
+    - Implement `SwitchBranch(name)` - update HEAD and working state
+    - Implement `CurrentBranch()` - return current branch name and detached state
+    - _Requirements: 3.1, 3.2, 3.3, 3.4, 2.4_
+  - [ ] 5.4 Write property test for switch branch updates working state
+    - **Property 5: Switch Branch Updates Working State**
+    - **Validates: Requirements 3.1, 3.3**
+  - [ ] 5.5 Write property test for current branch tracking
+    - **Property 6: Current Branch Tracking**
+    - **Validates: Requirements 2.4**
+  - [ ] 5.6 Implement Store branch deletion
+    - Implement `DeleteBranch(name)` with current branch protection
+    - _Requirements: 4.1, 4.2, 4.3_
+  - [ ] 5.7 Implement DetachHead operation
+    - Implement `DetachHead(commitHash)` - set HEAD to detached state
+    - _Requirements: 7.3_
+  - [ ] 5.8 Update Commit to advance current branch
+    - Modify `Commit()` to update branch pointer when HEAD is attached
+    - Ensure detached HEAD commits only update HEAD, not branches
+    - _Requirements: 5.1, 5.2, 5.3_
+  - [ ] 5.9 Write property test for commit advances branch
+    - **Property 7: Commit Advances Branch**
+    - **Validates: Requirements 5.1**
+  - [ ] 5.10 Write property test for detached commit preserves branches
+    - **Property 8: Detached Commit Preserves Branches**
+    - **Validates: Requirements 5.2**
+  - [ ] 5.11 Implement ListBranches on Store
+    - Wire up BranchManager.ListBranches to Store API
+    - _Requirements: 2.1_
+
+- [ ] 6. Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [ ] 7. Implement Persistence Verification
+  - [ ] 7.1 Ensure HEAD persistence across restarts
+    - Verify HEAD file is written on all state changes
+    - Load HEAD state on store initialization
+    - _Requirements: 6.3, 7.4_
+  - [ ] 7.2 Write property test for persistence round-trip
+    - **Property 9: Persistence Round-Trip**
+    - **Validates: Requirements 6.1, 6.3**
+
+- [ ] 8. Final Checkpoint - Ensure all tests pass
+  - Ensure all tests pass, ask the user if questions arise.
+
