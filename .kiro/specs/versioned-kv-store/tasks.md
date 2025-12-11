@@ -154,12 +154,12 @@
 - [x] 12. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 13. Implement Structural Sharing Verification
-  - [ ] 13.1 Add node tracking to verify structural sharing
+- [x] 13. Implement Structural Sharing Verification
+  - [x] 13.1 Add node tracking to verify structural sharing
     - Instrument CAS to track write operations
     - Verify node reuse across versions
     - _Requirements: 8.1, 8.2, 8.3_
-  - [ ] 13.2 Write property test for structural sharing efficiency
+  - [x] 13.2 Write property test for structural sharing efficiency
     - **Property 15: Structural Sharing Efficiency**
     - **Validates: Requirements 8.1, 8.2, 8.3**
 
