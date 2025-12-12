@@ -32,27 +32,27 @@
 - [x] 2. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [-] 3. Implement HEAD Manager
-  - [ ] 3.1 Implement HeadState struct and HEAD file parsing
+- [x] 3. Implement HEAD Manager
+  - [x] 3.1 Implement HeadState struct and HEAD file parsing
     - Create `pkg/branch/head.go` with HeadState struct
     - Implement `parseHeadFile(content)` to parse HEAD file format
     - Handle both "ref: refs/heads/name" and raw hash formats
     - _Requirements: 7.1, 7.2_
-  - [ ] 3.2 Implement HeadManager struct and operations
+  - [x] 3.2 Implement HeadManager struct and operations
     - Create HeadManager struct with reference to BranchManager
     - Implement `GetHead()` to return current HEAD state
     - Implement `GetHeadCommit()` to resolve HEAD to commit hash
     - Implement `SetHeadToBranch(name)` for attached HEAD
     - Implement `SetHeadToCommit(hash)` for detached HEAD
     - _Requirements: 2.4, 7.1, 7.2, 7.3, 7.4_
-  - [ ] 3.3 Write property test for HEAD file format correctness
+  - [x] 3.3 Write property test for HEAD file format correctness
     - **Property 10: HEAD File Format Correctness**
     - **Validates: Requirements 7.1, 7.2**
-  - [ ] 3.4 Write property test for detach head
+  - [x] 3.4 Write property test for detach head
     - **Property 11: Detach Head Sets Correct State**
     - **Validates: Requirements 7.3**
 
-- [ ] 4. Checkpoint - Ensure all tests pass
+- [x] 4. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 5. Integrate Branching with Store API
