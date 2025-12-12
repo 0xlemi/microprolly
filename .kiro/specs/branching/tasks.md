@@ -1,38 +1,38 @@
 # Implementation Plan
 
-- [ ] 1. Implement Branch Manager Core
-  - [ ] 1.1 Create branch name validation
+- [x] 1. Implement Branch Manager Core
+  - [x] 1.1 Create branch name validation
     - Create `pkg/branch/validate.go` with `ValidateBranchName(name string) error`
     - Implement validation rules: non-empty, no invalid characters, no reserved names
     - _Requirements: 1.4_
-  - [ ] 1.2 Write property test for invalid branch name rejection
+  - [x] 1.2 Write property test for invalid branch name rejection
     - **Property 3: Invalid Branch Name Rejection**
     - **Validates: Requirements 1.4**
-  - [ ] 1.3 Implement BranchManager struct and basic operations
+  - [x] 1.3 Implement BranchManager struct and basic operations
     - Create `pkg/branch/manager.go` with BranchManager struct
     - Implement `CreateBranch(name, commitHash)` with atomic file writes
     - Implement `GetBranch(name)` to read branch reference
     - Implement `BranchExists(name)` to check existence
     - _Requirements: 1.1, 1.2, 1.5, 2.2_
-  - [ ] 1.4 Write property test for branch creation round-trip
+  - [x] 1.4 Write property test for branch creation round-trip
     - **Property 1: Branch Creation Round-Trip**
     - **Validates: Requirements 1.1, 1.2, 2.2**
-  - [ ] 1.5 Implement branch listing and deletion
+  - [x] 1.5 Implement branch listing and deletion
     - Implement `ListBranches()` to list all branches in refs/heads/
     - Implement `DeleteBranch(name)` to remove branch reference
     - Implement `UpdateBranch(name, commitHash)` for advancing branches
     - _Requirements: 2.1, 4.1, 4.4_
-  - [ ] 1.6 Write property test for branch listing completeness
+  - [x] 1.6 Write property test for branch listing completeness
     - **Property 2: Branch Listing Completeness**
     - **Validates: Requirements 2.1**
-  - [ ] 1.7 Write property test for branch deletion
+  - [x] 1.7 Write property test for branch deletion
     - **Property 4: Branch Deletion Removes Branch**
     - **Validates: Requirements 4.1, 4.4**
 
-- [ ] 2. Checkpoint - Ensure all tests pass
+- [x] 2. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 3. Implement HEAD Manager
+- [-] 3. Implement HEAD Manager
   - [ ] 3.1 Implement HeadState struct and HEAD file parsing
     - Create `pkg/branch/head.go` with HeadState struct
     - Implement `parseHeadFile(content)` to parse HEAD file format
