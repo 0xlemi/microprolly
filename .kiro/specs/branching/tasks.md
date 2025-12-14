@@ -55,48 +55,48 @@
 - [x] 4. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 5. Integrate Branching with Store API
-  - [ ] 5.1 Add BranchManager and HeadManager to Store
+- [x] 5. Integrate Branching with Store API
+  - [x] 5.1 Add BranchManager and HeadManager to Store
     - Update `pkg/store/store.go` to include BranchManager and HeadManager
     - Initialize refs/heads/ directory on store creation
     - Create default "main" branch on first initialization
     - Load existing branches and HEAD on store open
     - _Requirements: 6.1, 6.2_
-  - [ ] 5.2 Implement Store branch creation methods
+  - [x] 5.2 Implement Store branch creation methods
     - Implement `CreateBranch(name)` - create at current HEAD
     - Implement `CreateBranchAt(name, commitHash)` - create at specific commit
     - _Requirements: 1.1, 1.2, 1.3_
-  - [ ] 5.3 Implement Store branch switching
+  - [x] 5.3 Implement Store branch switching
     - Implement `SwitchBranch(name)` - update HEAD and working state
     - Implement `CurrentBranch()` - return current branch name and detached state
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 2.4_
-  - [ ] 5.4 Write property test for switch branch updates working state
+  - [x] 5.4 Write property test for switch branch updates working state
     - **Property 5: Switch Branch Updates Working State**
     - **Validates: Requirements 3.1, 3.3**
-  - [ ] 5.5 Write property test for current branch tracking
+  - [x] 5.5 Write property test for current branch tracking
     - **Property 6: Current Branch Tracking**
     - **Validates: Requirements 2.4**
-  - [ ] 5.6 Implement Store branch deletion
+  - [x] 5.6 Implement Store branch deletion
     - Implement `DeleteBranch(name)` with current branch protection
     - _Requirements: 4.1, 4.2, 4.3_
-  - [ ] 5.7 Implement DetachHead operation
+  - [x] 5.7 Implement DetachHead operation
     - Implement `DetachHead(commitHash)` - set HEAD to detached state
     - _Requirements: 7.3_
-  - [ ] 5.8 Update Commit to advance current branch
+  - [x] 5.8 Update Commit to advance current branch
     - Modify `Commit()` to update branch pointer when HEAD is attached
     - Ensure detached HEAD commits only update HEAD, not branches
     - _Requirements: 5.1, 5.2, 5.3_
-  - [ ] 5.9 Write property test for commit advances branch
+  - [x] 5.9 Write property test for commit advances branch
     - **Property 7: Commit Advances Branch**
     - **Validates: Requirements 5.1**
-  - [ ] 5.10 Write property test for detached commit preserves branches
+  - [x] 5.10 Write property test for detached commit preserves branches
     - **Property 8: Detached Commit Preserves Branches**
     - **Validates: Requirements 5.2**
-  - [ ] 5.11 Implement ListBranches on Store
+  - [x] 5.11 Implement ListBranches on Store
     - Wire up BranchManager.ListBranches to Store API
     - _Requirements: 2.1_
 
-- [ ] 6. Checkpoint - Ensure all tests pass
+- [x] 6. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 7. Implement Persistence Verification

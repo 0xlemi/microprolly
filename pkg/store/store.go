@@ -2,13 +2,11 @@ package store
 
 import (
 	"bytes"
-	"encoding/hex"
 	"errors"
-	"os"
-	"path/filepath"
 	"sort"
 	"sync"
 
+	"microprolly/pkg/branch"
 	"microprolly/pkg/cas"
 	"microprolly/pkg/chunker"
 	"microprolly/pkg/tree"
@@ -22,6 +20,8 @@ var (
 	ErrCommitNotFound = errors.New("commit not found")
 	// ErrInvalidKey is returned when an empty key is provided
 	ErrInvalidKey = errors.New("invalid key: empty keys not allowed")
+	// ErrCannotDeleteCurrentBranch is returned when trying to delete the current branch
+	ErrCannotDeleteCurrentBranch = errors.New("cannot delete the current branch")
 )
 
 // Store is the main user-facing interface for the versioned key-value store
@@ -39,10 +39,14 @@ type Store struct {
 	// Version layer
 	commitMgr *CommitManager
 
+	// Branch layer
+	branchMgr *branch.BranchManager
+	headMgr   *branch.HeadManager
+
 	// Working state - in-memory map of current uncommitted changes
 	workingState map[string][]byte
 
-	// HEAD commit reference
+	// HEAD commit reference (cached from HeadManager)
 	head types.Hash
 
 	// Data directory for HEAD file persistence
@@ -50,7 +54,7 @@ type Store struct {
 }
 
 // NewStore creates a new Store with the given CAS directory
-// Requirements: 9.1, 9.2
+// Requirements: 9.1, 9.2, 6.1, 6.2
 func NewStore(dataDir string) (*Store, error) {
 	// Initialize CAS
 	casStore, err := cas.NewFileCAS(dataDir)
@@ -61,13 +65,41 @@ func NewStore(dataDir string) (*Store, error) {
 	store := NewStoreWithCAS(casStore)
 	store.dataDir = dataDir
 
-	// Load HEAD from file if it exists
-	if err := store.loadHead(); err != nil {
-		// If HEAD file doesn't exist, that's fine - start with ZeroHash
-		if !os.IsNotExist(err) {
+	// Initialize BranchManager (creates refs/heads/ directory)
+	branchMgr, err := branch.NewBranchManager(dataDir)
+	if err != nil {
+		return nil, err
+	}
+	store.branchMgr = branchMgr
+
+	// Initialize HeadManager
+	store.headMgr = branch.NewHeadManager(dataDir, branchMgr)
+
+	// Check if this is a fresh store (no branches exist)
+	branches, err := branchMgr.ListBranches()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(branches) == 0 {
+		// Create default "main" branch pointing to ZeroHash
+		// This will be updated when the first commit is made
+		if err := branchMgr.CreateBranch("main", ZeroHash); err != nil {
 			return nil, err
 		}
 	}
+
+	// Initialize HEAD to point to main branch if it doesn't exist
+	if err := store.headMgr.InitializeHead("main"); err != nil {
+		return nil, err
+	}
+
+	// Load HEAD state from HeadManager
+	headState, err := store.headMgr.GetHead()
+	if err != nil {
+		return nil, err
+	}
+	store.head = headState.CommitHash
 
 	// If we have a HEAD commit, load its state into working state
 	if store.head != ZeroHash {
@@ -183,89 +215,6 @@ func (s *Store) Close() error {
 	return s.cas.Close()
 }
 
-// headFilePath returns the path to the HEAD file
-func (s *Store) headFilePath() string {
-	return filepath.Join(s.dataDir, "HEAD")
-}
-
-// loadHead loads the HEAD commit hash from the HEAD file
-// Requirements: 9.2
-func (s *Store) loadHead() error {
-	if s.dataDir == "" {
-		return nil // No persistence for in-memory stores
-	}
-
-	data, err := os.ReadFile(s.headFilePath())
-	if err != nil {
-		return err
-	}
-
-	// HEAD file contains hex-encoded hash
-	hashStr := string(bytes.TrimSpace(data))
-	if hashStr == "" {
-		s.head = ZeroHash
-		return nil
-	}
-
-	hashBytes, err := hex.DecodeString(hashStr)
-	if err != nil {
-		return err
-	}
-
-	if len(hashBytes) != 32 {
-		return errors.New("invalid HEAD file: hash must be 32 bytes")
-	}
-
-	copy(s.head[:], hashBytes)
-	return nil
-}
-
-// saveHead persists the HEAD commit hash to the HEAD file
-// Requirements: 9.2, 9.3
-func (s *Store) saveHead() error {
-	if s.dataDir == "" {
-		return nil // No persistence for in-memory stores
-	}
-
-	headPath := s.headFilePath()
-
-	// Atomic write: write to temp file, sync, then rename
-	tmpFile, err := os.CreateTemp(s.dataDir, ".HEAD-tmp-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmpFile.Name()
-
-	// Write hex-encoded hash
-	_, err = tmpFile.WriteString(s.head.String() + "\n")
-	if err != nil {
-		tmpFile.Close()
-		os.Remove(tmpPath)
-		return err
-	}
-
-	// Sync to ensure data is written to disk
-	if err := tmpFile.Sync(); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpPath)
-		return err
-	}
-
-	// Close before rename
-	if err := tmpFile.Close(); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-
-	// Atomic rename
-	if err := os.Rename(tmpPath, headPath); err != nil {
-		os.Remove(tmpPath)
-		return err
-	}
-
-	return nil
-}
-
 // loadWorkingStateFromHead loads the working state from the current HEAD commit
 func (s *Store) loadWorkingStateFromHead() error {
 	if s.head == ZeroHash {
@@ -298,7 +247,7 @@ func (s *Store) loadWorkingStateFromHead() error {
 }
 
 // Commit creates a new commit with the current working state
-// Requirements: 5.1, 5.2, 9.2
+// Requirements: 5.1, 5.2, 5.3, 9.2
 func (s *Store) Commit(message string) (types.Hash, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -321,9 +270,26 @@ func (s *Store) Commit(message string) (types.Hash, error) {
 	// Update HEAD reference
 	s.head = commitHash
 
-	// Persist HEAD to disk
-	if err := s.saveHead(); err != nil {
-		return types.Hash{}, err
+	// If HeadManager is available, update branch pointer or HEAD
+	if s.headMgr != nil {
+		headState, err := s.headMgr.GetHead()
+		if err != nil {
+			return types.Hash{}, err
+		}
+
+		if headState.IsDetached {
+			// Detached HEAD: only update HEAD to point to new commit
+			// Requirements: 5.2
+			if err := s.headMgr.SetHeadToCommit(commitHash); err != nil {
+				return types.Hash{}, err
+			}
+		} else {
+			// Attached HEAD: update branch to point to new commit
+			// Requirements: 5.1, 5.3
+			if err := s.branchMgr.UpdateBranch(headState.Branch, commitHash); err != nil {
+				return types.Hash{}, err
+			}
+		}
 	}
 
 	return commitHash, nil
@@ -358,6 +324,7 @@ func (s *Store) GetAt(key []byte, commitHash types.Hash) ([]byte, error) {
 }
 
 // Checkout sets the working state to match a specific commit's data
+// This puts HEAD in detached state pointing to the commit
 // Requirements: 6.4, 9.2
 func (s *Store) Checkout(commitHash types.Hash) error {
 	s.mu.Lock()
@@ -389,9 +356,11 @@ func (s *Store) Checkout(commitHash types.Hash) error {
 	// Update HEAD reference
 	s.head = commitHash
 
-	// Persist HEAD to disk
-	if err := s.saveHead(); err != nil {
-		return err
+	// Persist HEAD to disk using HeadManager if available
+	if s.headMgr != nil {
+		if err := s.headMgr.SetHeadToCommit(commitHash); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -429,4 +398,198 @@ func (s *Store) Log() ([]*types.Commit, error) {
 	}
 
 	return s.commitMgr.Log(s.head)
+}
+
+// CreateBranch creates a new branch at the current HEAD commit
+// Requirements: 1.1
+func (s *Store) CreateBranch(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.branchMgr == nil {
+		return errors.New("branch manager not initialized")
+	}
+
+	return s.branchMgr.CreateBranch(name, s.head)
+}
+
+// CreateBranchAt creates a new branch at a specific commit
+// Requirements: 1.2, 1.3
+func (s *Store) CreateBranchAt(name string, commitHash types.Hash) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.branchMgr == nil {
+		return errors.New("branch manager not initialized")
+	}
+
+	return s.branchMgr.CreateBranch(name, commitHash)
+}
+
+// SwitchBranch switches to a different branch, updating HEAD and working state
+// Requirements: 3.1, 3.2, 3.3, 3.4
+func (s *Store) SwitchBranch(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.branchMgr == nil || s.headMgr == nil {
+		return errors.New("branch manager not initialized")
+	}
+
+	// Check if branch exists
+	if !s.branchMgr.BranchExists(name) {
+		return branch.ErrBranchNotFound
+	}
+
+	// Get the commit hash the branch points to
+	commitHash, err := s.branchMgr.GetBranch(name)
+	if err != nil {
+		return err
+	}
+
+	// Update HEAD to point to the branch (attached state)
+	if err := s.headMgr.SetHeadToBranch(name); err != nil {
+		return err
+	}
+
+	// Update cached head
+	s.head = commitHash
+
+	// Load working state from the branch's commit
+	if commitHash != ZeroHash {
+		// Get the commit to find its root hash
+		commit, err := s.commitMgr.GetCommit(commitHash)
+		if err != nil {
+			return err
+		}
+
+		// Load all KV pairs from the commit's tree
+		pairs, err := s.traverser.GetAll(commit.RootHash)
+		if err != nil {
+			return err
+		}
+
+		// Clear current working state and populate with commit's data
+		s.workingState = make(map[string][]byte)
+		for _, pair := range pairs {
+			keyCopy := make([]byte, len(pair.Key))
+			copy(keyCopy, pair.Key)
+			valueCopy := make([]byte, len(pair.Value))
+			copy(valueCopy, pair.Value)
+			s.workingState[string(keyCopy)] = valueCopy
+		}
+	} else {
+		// Branch points to ZeroHash (no commits yet), clear working state
+		s.workingState = make(map[string][]byte)
+	}
+
+	return nil
+}
+
+// CurrentBranch returns the current branch name and whether HEAD is detached
+// Returns (branchName, isDetached, error)
+// Requirements: 2.4
+func (s *Store) CurrentBranch() (string, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.headMgr == nil {
+		return "", false, errors.New("head manager not initialized")
+	}
+
+	headState, err := s.headMgr.GetHead()
+	if err != nil {
+		return "", false, err
+	}
+
+	return headState.Branch, headState.IsDetached, nil
+}
+
+// DeleteBranch deletes a branch
+// Cannot delete the currently checked-out branch
+// Requirements: 4.1, 4.2, 4.3
+func (s *Store) DeleteBranch(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.branchMgr == nil || s.headMgr == nil {
+		return errors.New("branch manager not initialized")
+	}
+
+	// Check if branch exists
+	if !s.branchMgr.BranchExists(name) {
+		return branch.ErrBranchNotFound
+	}
+
+	// Check if this is the current branch
+	headState, err := s.headMgr.GetHead()
+	if err != nil {
+		return err
+	}
+
+	if !headState.IsDetached && headState.Branch == name {
+		return ErrCannotDeleteCurrentBranch
+	}
+
+	return s.branchMgr.DeleteBranch(name)
+}
+
+// DetachHead sets HEAD to point directly to a commit (detached state)
+// Requirements: 7.3
+func (s *Store) DetachHead(commitHash types.Hash) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.headMgr == nil {
+		return errors.New("head manager not initialized")
+	}
+
+	// Verify the commit exists
+	_, err := s.commitMgr.GetCommit(commitHash)
+	if err != nil {
+		return ErrCommitNotFound
+	}
+
+	// Set HEAD to detached state
+	if err := s.headMgr.SetHeadToCommit(commitHash); err != nil {
+		return err
+	}
+
+	// Update cached head
+	s.head = commitHash
+
+	// Load working state from the commit
+	commit, err := s.commitMgr.GetCommit(commitHash)
+	if err != nil {
+		return err
+	}
+
+	pairs, err := s.traverser.GetAll(commit.RootHash)
+	if err != nil {
+		return err
+	}
+
+	s.workingState = make(map[string][]byte)
+	for _, pair := range pairs {
+		keyCopy := make([]byte, len(pair.Key))
+		copy(keyCopy, pair.Key)
+		valueCopy := make([]byte, len(pair.Value))
+		copy(valueCopy, pair.Value)
+		s.workingState[string(keyCopy)] = valueCopy
+	}
+
+	return nil
+}
+
+// ListBranches returns all branch names
+// Requirements: 2.1
+func (s *Store) ListBranches() ([]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.branchMgr == nil {
+		return nil, errors.New("branch manager not initialized")
+	}
+
+	return s.branchMgr.ListBranches()
 }

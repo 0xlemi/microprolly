@@ -503,3 +503,414 @@ func TestProperty_PersistenceAcrossRestarts(t *testing.T) {
 		}
 	})
 }
+
+// createTestStoreWithDir creates a Store with a specific directory for testing
+func createTestStoreWithDir(t *testing.T) (*Store, string, func()) {
+	tmpDir, err := os.MkdirTemp("", "store-branch-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := NewStore(tmpDir)
+	if err != nil {
+		os.RemoveAll(tmpDir)
+		t.Fatal(err)
+	}
+
+	cleanup := func() {
+		store.Close()
+		os.RemoveAll(tmpDir)
+	}
+
+	return store, tmpDir, cleanup
+}
+
+// TestProperty_SwitchBranchUpdatesWorkingState tests Property 5: Switch Branch Updates Working State
+// **Feature: branching, Property 5: Switch Branch Updates Working State**
+// **Validates: Requirements 3.1, 3.3**
+//
+// For any branch with committed data, after SwitchBranch(), the working state SHALL match
+// the data at that branch's commit.
+func TestProperty_SwitchBranchUpdatesWorkingState(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		// Create a fresh Store for each test
+		tmpDir, err := os.MkdirTemp("", "switch-branch-test-*")
+		if err != nil {
+			rt.Fatalf("Failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tmpDir)
+
+		store, err := NewStore(tmpDir)
+		if err != nil {
+			rt.Fatalf("Failed to create Store: %v", err)
+		}
+		defer store.Close()
+
+		// Generate key-value pairs for branch1 (main)
+		numPairs1 := rapid.IntRange(1, 5).Draw(rt, "numPairs1")
+		branch1Data := make(map[string][]byte)
+		for i := 0; i < numPairs1; i++ {
+			key := genNonEmptyBytes(rt, "key1")
+			value := rapid.SliceOfN(rapid.Byte(), 1, 50).Draw(rt, "value1")
+			branch1Data[string(key)] = value
+			if err := store.Put(key, value); err != nil {
+				rt.Fatalf("Put failed: %v", err)
+			}
+		}
+
+		// Commit on main branch
+		_, err = store.Commit("commit on main")
+		if err != nil {
+			rt.Fatalf("Commit on main failed: %v", err)
+		}
+
+		// Create a new branch
+		err = store.CreateBranch("feature")
+		if err != nil {
+			rt.Fatalf("CreateBranch failed: %v", err)
+		}
+
+		// Switch to feature branch
+		err = store.SwitchBranch("feature")
+		if err != nil {
+			rt.Fatalf("SwitchBranch to feature failed: %v", err)
+		}
+
+		// Add different data on feature branch
+		numPairs2 := rapid.IntRange(1, 5).Draw(rt, "numPairs2")
+		branch2Data := make(map[string][]byte)
+		// Copy existing data first
+		for k, v := range branch1Data {
+			branch2Data[k] = v
+		}
+		// Add new unique keys
+		for i := 0; i < numPairs2; i++ {
+			key := append([]byte("feature_"), genNonEmptyBytes(rt, "key2")...)
+			value := rapid.SliceOfN(rapid.Byte(), 1, 50).Draw(rt, "value2")
+			branch2Data[string(key)] = value
+			if err := store.Put(key, value); err != nil {
+				rt.Fatalf("Put on feature failed: %v", err)
+			}
+		}
+
+		// Commit on feature branch
+		_, err = store.Commit("commit on feature")
+		if err != nil {
+			rt.Fatalf("Commit on feature failed: %v", err)
+		}
+
+		// Switch back to main
+		err = store.SwitchBranch("main")
+		if err != nil {
+			rt.Fatalf("SwitchBranch to main failed: %v", err)
+		}
+
+		// Verify working state matches main branch data
+		for keyStr, expectedValue := range branch1Data {
+			key := []byte(keyStr)
+			retrieved, err := store.Get(key)
+			if err != nil {
+				rt.Fatalf("Get key %q after switch to main failed: %v", keyStr, err)
+			}
+			if len(retrieved) != len(expectedValue) {
+				rt.Fatalf("Value length mismatch for key %q: got %d, want %d", keyStr, len(retrieved), len(expectedValue))
+			}
+			for i := range expectedValue {
+				if retrieved[i] != expectedValue[i] {
+					rt.Fatalf("Value mismatch for key %q at byte %d", keyStr, i)
+				}
+			}
+		}
+
+		// Verify feature-only keys don't exist on main
+		for keyStr := range branch2Data {
+			if _, exists := branch1Data[keyStr]; !exists {
+				key := []byte(keyStr)
+				_, err := store.Get(key)
+				if err != ErrKeyNotFound {
+					rt.Fatalf("Feature-only key %q should not exist on main, got err: %v", keyStr, err)
+				}
+			}
+		}
+
+		// Switch to feature and verify its data
+		err = store.SwitchBranch("feature")
+		if err != nil {
+			rt.Fatalf("SwitchBranch to feature (second time) failed: %v", err)
+		}
+
+		for keyStr, expectedValue := range branch2Data {
+			key := []byte(keyStr)
+			retrieved, err := store.Get(key)
+			if err != nil {
+				rt.Fatalf("Get key %q after switch to feature failed: %v", keyStr, err)
+			}
+			if len(retrieved) != len(expectedValue) {
+				rt.Fatalf("Value length mismatch for key %q on feature: got %d, want %d", keyStr, len(retrieved), len(expectedValue))
+			}
+			for i := range expectedValue {
+				if retrieved[i] != expectedValue[i] {
+					rt.Fatalf("Value mismatch for key %q on feature at byte %d", keyStr, i)
+				}
+			}
+		}
+	})
+}
+
+// TestProperty_CurrentBranchTracking tests Property 6: Current Branch Tracking
+// **Feature: branching, Property 6: Current Branch Tracking**
+// **Validates: Requirements 2.4**
+//
+// For any branch switch operation, CurrentBranch() SHALL return the name of the branch
+// that was switched to.
+func TestProperty_CurrentBranchTracking(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		// Create a fresh Store for each test
+		tmpDir, err := os.MkdirTemp("", "current-branch-test-*")
+		if err != nil {
+			rt.Fatalf("Failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tmpDir)
+
+		store, err := NewStore(tmpDir)
+		if err != nil {
+			rt.Fatalf("Failed to create Store: %v", err)
+		}
+		defer store.Close()
+
+		// Initially should be on main branch
+		branchName, isDetached, err := store.CurrentBranch()
+		if err != nil {
+			rt.Fatalf("CurrentBranch failed: %v", err)
+		}
+		if branchName != "main" {
+			rt.Fatalf("Expected initial branch to be 'main', got %q", branchName)
+		}
+		if isDetached {
+			rt.Fatalf("Expected HEAD to be attached initially")
+		}
+
+		// Make a commit so we can create branches
+		store.Put([]byte("key"), []byte("value"))
+		_, err = store.Commit("initial commit")
+		if err != nil {
+			rt.Fatalf("Initial commit failed: %v", err)
+		}
+
+		// Generate a valid branch name
+		branchSuffix := rapid.StringMatching(`[a-z][a-z0-9]{0,9}`).Draw(rt, "branch_suffix")
+		if branchSuffix == "" {
+			branchSuffix = "test"
+		}
+		newBranchName := "feature-" + branchSuffix
+
+		// Create and switch to new branch
+		err = store.CreateBranch(newBranchName)
+		if err != nil {
+			rt.Fatalf("CreateBranch(%q) failed: %v", newBranchName, err)
+		}
+
+		err = store.SwitchBranch(newBranchName)
+		if err != nil {
+			rt.Fatalf("SwitchBranch(%q) failed: %v", newBranchName, err)
+		}
+
+		// Verify CurrentBranch returns the new branch
+		branchName, isDetached, err = store.CurrentBranch()
+		if err != nil {
+			rt.Fatalf("CurrentBranch after switch failed: %v", err)
+		}
+		if branchName != newBranchName {
+			rt.Fatalf("Expected current branch to be %q, got %q", newBranchName, branchName)
+		}
+		if isDetached {
+			rt.Fatalf("Expected HEAD to be attached after SwitchBranch")
+		}
+
+		// Switch back to main
+		err = store.SwitchBranch("main")
+		if err != nil {
+			rt.Fatalf("SwitchBranch to main failed: %v", err)
+		}
+
+		// Verify CurrentBranch returns main
+		branchName, isDetached, err = store.CurrentBranch()
+		if err != nil {
+			rt.Fatalf("CurrentBranch after switch to main failed: %v", err)
+		}
+		if branchName != "main" {
+			rt.Fatalf("Expected current branch to be 'main', got %q", branchName)
+		}
+		if isDetached {
+			rt.Fatalf("Expected HEAD to be attached after SwitchBranch to main")
+		}
+	})
+}
+
+// TestProperty_CommitAdvancesBranch tests Property 7: Commit Advances Branch
+// **Feature: branching, Property 7: Commit Advances Branch**
+// **Validates: Requirements 5.1**
+//
+// For any commit made while HEAD points to a branch, that branch SHALL be updated
+// to point to the new commit.
+func TestProperty_CommitAdvancesBranch(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		// Create a fresh Store for each test
+		tmpDir, err := os.MkdirTemp("", "commit-advances-branch-test-*")
+		if err != nil {
+			rt.Fatalf("Failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tmpDir)
+
+		store, err := NewStore(tmpDir)
+		if err != nil {
+			rt.Fatalf("Failed to create Store: %v", err)
+		}
+		defer store.Close()
+
+		// Verify we're on main branch
+		branchName, isDetached, err := store.CurrentBranch()
+		if err != nil {
+			rt.Fatalf("CurrentBranch failed: %v", err)
+		}
+		if branchName != "main" || isDetached {
+			rt.Fatalf("Expected to be on main branch, got %q (detached=%v)", branchName, isDetached)
+		}
+
+		// Generate and add some data
+		numPairs := rapid.IntRange(1, 5).Draw(rt, "numPairs")
+		for i := 0; i < numPairs; i++ {
+			key := genNonEmptyBytes(rt, "key")
+			value := rapid.SliceOfN(rapid.Byte(), 1, 50).Draw(rt, "value")
+			if err := store.Put(key, value); err != nil {
+				rt.Fatalf("Put failed: %v", err)
+			}
+		}
+
+		// Commit
+		commitHash, err := store.Commit("test commit")
+		if err != nil {
+			rt.Fatalf("Commit failed: %v", err)
+		}
+
+		// Verify HEAD points to the new commit
+		if store.Head() != commitHash {
+			rt.Fatalf("HEAD should point to new commit: got %s, want %s", store.Head().String(), commitHash.String())
+		}
+
+		// Verify the branch was updated to point to the new commit
+		// We need to access the branch manager directly through the store
+		// Since we're on main, switching away and back should give us the same commit
+		err = store.CreateBranch("temp")
+		if err != nil {
+			rt.Fatalf("CreateBranch temp failed: %v", err)
+		}
+
+		err = store.SwitchBranch("temp")
+		if err != nil {
+			rt.Fatalf("SwitchBranch to temp failed: %v", err)
+		}
+
+		err = store.SwitchBranch("main")
+		if err != nil {
+			rt.Fatalf("SwitchBranch back to main failed: %v", err)
+		}
+
+		// After switching back, HEAD should still point to the commit we made
+		if store.Head() != commitHash {
+			rt.Fatalf("After switch back, HEAD should point to commit: got %s, want %s", store.Head().String(), commitHash.String())
+		}
+	})
+}
+
+// TestProperty_DetachedCommitPreservesBranches tests Property 8: Detached Commit Preserves Branches
+// **Feature: branching, Property 8: Detached Commit Preserves Branches**
+// **Validates: Requirements 5.2**
+//
+// For any commit made while HEAD is detached, all existing branches SHALL remain unchanged.
+func TestProperty_DetachedCommitPreservesBranches(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		// Create a fresh Store for each test
+		tmpDir, err := os.MkdirTemp("", "detached-commit-test-*")
+		if err != nil {
+			rt.Fatalf("Failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tmpDir)
+
+		store, err := NewStore(tmpDir)
+		if err != nil {
+			rt.Fatalf("Failed to create Store: %v", err)
+		}
+		defer store.Close()
+
+		// Make an initial commit on main
+		store.Put([]byte("initial"), []byte("data"))
+		initialCommit, err := store.Commit("initial commit")
+		if err != nil {
+			rt.Fatalf("Initial commit failed: %v", err)
+		}
+
+		// Create another branch at the same commit
+		err = store.CreateBranch("feature")
+		if err != nil {
+			rt.Fatalf("CreateBranch feature failed: %v", err)
+		}
+
+		// Detach HEAD to the initial commit
+		err = store.DetachHead(initialCommit)
+		if err != nil {
+			rt.Fatalf("DetachHead failed: %v", err)
+		}
+
+		// Verify we're in detached state
+		_, isDetached, err := store.CurrentBranch()
+		if err != nil {
+			rt.Fatalf("CurrentBranch failed: %v", err)
+		}
+		if !isDetached {
+			rt.Fatalf("Expected HEAD to be detached")
+		}
+
+		// Make a commit in detached state
+		numPairs := rapid.IntRange(1, 3).Draw(rt, "numPairs")
+		for i := 0; i < numPairs; i++ {
+			key := append([]byte("detached_"), genNonEmptyBytes(rt, "key")...)
+			value := rapid.SliceOfN(rapid.Byte(), 1, 50).Draw(rt, "value")
+			if err := store.Put(key, value); err != nil {
+				rt.Fatalf("Put in detached state failed: %v", err)
+			}
+		}
+
+		detachedCommit, err := store.Commit("detached commit")
+		if err != nil {
+			rt.Fatalf("Commit in detached state failed: %v", err)
+		}
+
+		// Verify HEAD moved to the new commit
+		if store.Head() != detachedCommit {
+			rt.Fatalf("HEAD should point to detached commit")
+		}
+
+		// Verify main branch still points to initial commit
+		err = store.SwitchBranch("main")
+		if err != nil {
+			rt.Fatalf("SwitchBranch to main failed: %v", err)
+		}
+
+		if store.Head() != initialCommit {
+			rt.Fatalf("main branch should still point to initial commit: got %s, want %s",
+				store.Head().String(), initialCommit.String())
+		}
+
+		// Verify feature branch still points to initial commit
+		err = store.SwitchBranch("feature")
+		if err != nil {
+			rt.Fatalf("SwitchBranch to feature failed: %v", err)
+		}
+
+		if store.Head() != initialCommit {
+			rt.Fatalf("feature branch should still point to initial commit: got %s, want %s",
+				store.Head().String(), initialCommit.String())
+		}
+	})
+}
