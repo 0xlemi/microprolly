@@ -7,6 +7,7 @@ A lightweight, versioned key-value store with Git-like features. Built on Prolly
 MicroProlly is an embedded database that combines:
 - **Key-Value Store**: Simple `Put`, `Get`, `Delete` operations
 - **Version Control**: Commits, history, time-travel queries
+- **Branching**: Create, switch, and delete branches for parallel development
 - **Efficient Storage**: Only changed data is stored per version
 
 Think of it as "Git for your data" - every change creates a new version, but unchanged data is shared between versions automatically.
@@ -35,6 +36,7 @@ Only the path from the changed leaf to the root is rewritten. Everything else is
 
 ## Features
 
+- **Branching**: Create parallel lines of development with named branches
 - **Time Travel**: Query data as it existed at any previous commit
 - **Efficient Diffs**: Compare two versions and see exactly what changed
 - **Structural Sharing**: Change 1 key in 1 million? Only ~4 nodes written, not 1 million
@@ -59,7 +61,7 @@ go mod tidy
 
 ## Complete Example
 
-See [examples/demo/main.go](examples/demo/main.go) for a full working example:
+See [examples/demo/main.go](examples/demo/main.go) for a full working example that demonstrates all features including branching.
 
 Run it with:
 ```bash
@@ -132,13 +134,38 @@ for _, c := range commits {
 head := db.Head()
 ```
 
+### Branching
+
+```go
+// Create a new branch at current HEAD
+err := db.CreateBranch("feature-x")
+
+// Create a branch at a specific commit
+err := db.CreateBranchAt("hotfix", commitHash)
+
+// List all branches
+branches, err := db.ListBranches()
+
+// Get current branch name and detached state
+name, isDetached, err := db.CurrentBranch()
+
+// Switch to a different branch
+err := db.SwitchBranch("feature-x")
+
+// Delete a branch (cannot delete current branch)
+err := db.DeleteBranch("feature-x")
+
+// Detach HEAD to a specific commit
+err := db.DetachHead(commitHash)
+```
+
 ### Time Travel
 
 ```go
 // GetAt retrieves a value as it existed at a specific commit
 oldValue, err := db.GetAt(key, commitHash)
 
-// Checkout restores working state to a specific commit
+// Checkout restores working state to a specific commit (detaches HEAD)
 err := db.Checkout(commitHash)
 ```
 
@@ -153,6 +180,49 @@ fmt.Println("Modified:", len(diff.Modified))
 fmt.Println("Deleted:", len(diff.Deleted))
 ```
 
+## Branching Model
+
+MicroProlly follows a Git-like branching model:
+
+- **Branches** are lightweight pointers to commits stored in `refs/heads/`
+- **HEAD** tracks the current position - either attached to a branch or detached at a commit
+- **Commits** automatically advance the current branch when HEAD is attached
+- **Default branch** is `main`, created automatically on first store initialization
+
+```
+refs/heads/
+├── main        → commit abc123
+├── feature-x   → commit def456
+└── hotfix      → commit 789ghi
+
+HEAD → ref: refs/heads/main  (attached)
+  or → abc123...             (detached)
+```
+
+### Branch Workflow Example
+
+```go
+// Start on main branch
+db.Put([]byte("key"), []byte("value"))
+db.Commit("Initial commit")
+
+// Create and switch to feature branch
+db.CreateBranch("feature")
+db.SwitchBranch("feature")
+
+// Make changes on feature branch
+db.Put([]byte("feature-key"), []byte("feature-value"))
+db.Commit("Add feature")
+
+// Switch back to main - feature changes not visible
+db.SwitchBranch("main")
+value, err := db.Get([]byte("feature-key")) // ErrKeyNotFound
+
+// Make independent changes on main
+db.Put([]byte("main-key"), []byte("main-value"))
+db.Commit("Main update")
+```
+
 ## Project Structure
 
 ```
@@ -162,6 +232,7 @@ microprolly/
 │   ├── cas/        # Content-Addressed Storage
 │   ├── chunker/    # Buzhash rolling hash chunking
 │   ├── tree/       # Prolly Tree construction, traversal & diff
+│   ├── branch/     # Branch and HEAD management
 │   └── store/      # High-level Store API
 ├── examples/
 │   └── demo/       # Working example
@@ -176,7 +247,11 @@ microprolly/
 │   ├── a1/
 │   │   └── b2c3d4...  # Object files (nodes, commits)
 │   └── ...
-└── HEAD               # Current commit hash (hex-encoded)
+├── HEAD               # Current HEAD reference
+└── refs/
+    └── heads/         # Branch references
+        ├── main       # Default branch
+        └── ...        # Other branches
 ```
 
 ## Testing
@@ -192,6 +267,7 @@ go test ./... -v
 
 # Run specific package tests
 go test ./pkg/store -v
+go test ./pkg/branch -v
 ```
 
 ## Why MicroProlly?
@@ -201,11 +277,12 @@ This is a learning project to understand how "Git for Data" systems like [Dolt](
 - Prolly Trees for history-independent structure
 - Content-addressed storage for deduplication
 - Structural sharing for efficient versioning
+- Git-like branching model
 
 ## Limitations
 
 - Single-writer (no concurrent write support)
-- No branching/merging (linear history only)
+- No merging (branches can diverge but not merge)
 - No garbage collection for orphaned objects
 - Keys and values are byte slices (no schema)
 
