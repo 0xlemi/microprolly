@@ -99,15 +99,15 @@
 - [x] 6. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 7. Implement Persistence Verification
-  - [ ] 7.1 Ensure HEAD persistence across restarts
+- [x] 7. Implement Persistence Verification
+  - [x] 7.1 Ensure HEAD persistence across restarts
     - Verify HEAD file is written on all state changes
     - Load HEAD state on store initialization
     - _Requirements: 6.3, 7.4_
-  - [ ] 7.2 Write property test for persistence round-trip
+  - [x] 7.2 Write property test for persistence round-trip
     - **Property 9: Persistence Round-Trip**
     - **Validates: Requirements 6.1, 6.3**
 
-- [ ] 8. Final Checkpoint - Ensure all tests pass
+- [x] 8. Final Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 

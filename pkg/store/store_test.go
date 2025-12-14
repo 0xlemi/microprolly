@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"microprolly/pkg/cas"
+	"microprolly/pkg/types"
 
 	"pgregory.net/rapid"
 )
@@ -911,6 +912,166 @@ func TestProperty_DetachedCommitPreservesBranches(t *testing.T) {
 		if store.Head() != initialCommit {
 			rt.Fatalf("feature branch should still point to initial commit: got %s, want %s",
 				store.Head().String(), initialCommit.String())
+		}
+	})
+}
+
+// TestProperty_PersistenceRoundTrip tests Property 9: Persistence Round-Trip
+// **Feature: branching, Property 9: Persistence Round-Trip**
+// **Validates: Requirements 6.1, 6.3**
+//
+// For any set of branches and HEAD state, closing and reopening the store SHALL restore
+// the same branches and HEAD state.
+func TestProperty_PersistenceRoundTrip(t *testing.T) {
+	rapid.Check(t, func(rt *rapid.T) {
+		// Create a temporary directory for the store
+		tmpDir, err := os.MkdirTemp("", "persistence-roundtrip-*")
+		if err != nil {
+			rt.Fatalf("Failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tmpDir)
+
+		// Create store and make initial commit
+		store1, err := NewStore(tmpDir)
+		if err != nil {
+			rt.Fatalf("Failed to create store: %v", err)
+		}
+
+		// Add some data and commit on main
+		store1.Put([]byte("key1"), []byte("value1"))
+		mainCommit, err := store1.Commit("main commit")
+		if err != nil {
+			rt.Fatalf("Commit on main failed: %v", err)
+		}
+
+		// Generate additional branches
+		numBranches := rapid.IntRange(0, 5).Draw(rt, "numBranches")
+		createdBranches := make(map[string]bool)
+		createdBranches["main"] = true
+
+		for i := 0; i < numBranches; i++ {
+			// Generate a valid branch name
+			branchSuffix := rapid.StringMatching(`[a-z][a-z0-9]{0,9}`).Draw(rt, "branch_suffix")
+			if branchSuffix == "" {
+				branchSuffix = "test"
+			}
+			branchName := "branch-" + branchSuffix
+
+			// Skip if already created
+			if createdBranches[branchName] {
+				continue
+			}
+
+			err := store1.CreateBranch(branchName)
+			if err != nil {
+				// Skip on errors (e.g., duplicate names)
+				continue
+			}
+			createdBranches[branchName] = true
+		}
+
+		// Get the list of branches before closing
+		branchesBefore, err := store1.ListBranches()
+		if err != nil {
+			rt.Fatalf("ListBranches failed: %v", err)
+		}
+
+		// Decide whether to test attached or detached HEAD
+		testDetached := rapid.Bool().Draw(rt, "test_detached")
+
+		var expectedBranch string
+		var expectedDetached bool
+		var expectedHead types.Hash
+
+		if testDetached && mainCommit != ZeroHash {
+			// Detach HEAD to the main commit
+			err = store1.DetachHead(mainCommit)
+			if err != nil {
+				rt.Fatalf("DetachHead failed: %v", err)
+			}
+			expectedBranch = ""
+			expectedDetached = true
+			expectedHead = mainCommit
+		} else {
+			// Pick a random branch to be on
+			branchList := make([]string, 0, len(createdBranches))
+			for name := range createdBranches {
+				branchList = append(branchList, name)
+			}
+			if len(branchList) > 0 {
+				idx := rapid.IntRange(0, len(branchList)-1).Draw(rt, "branch_idx")
+				expectedBranch = branchList[idx]
+				err = store1.SwitchBranch(expectedBranch)
+				if err != nil {
+					rt.Fatalf("SwitchBranch to %q failed: %v", expectedBranch, err)
+				}
+			} else {
+				expectedBranch = "main"
+			}
+			expectedDetached = false
+			expectedHead = store1.Head()
+		}
+
+		// Close the store
+		err = store1.Close()
+		if err != nil {
+			rt.Fatalf("Close failed: %v", err)
+		}
+
+		// Reopen the store
+		store2, err := NewStore(tmpDir)
+		if err != nil {
+			rt.Fatalf("Failed to reopen store: %v", err)
+		}
+		defer store2.Close()
+
+		// Verify branches are restored
+		branchesAfter, err := store2.ListBranches()
+		if err != nil {
+			rt.Fatalf("ListBranches after reopen failed: %v", err)
+		}
+
+		// Convert to maps for comparison
+		beforeMap := make(map[string]bool)
+		for _, name := range branchesBefore {
+			beforeMap[name] = true
+		}
+		afterMap := make(map[string]bool)
+		for _, name := range branchesAfter {
+			afterMap[name] = true
+		}
+
+		// Verify all branches from before exist after
+		for name := range beforeMap {
+			if !afterMap[name] {
+				rt.Fatalf("Branch %q existed before close but not after reopen", name)
+			}
+		}
+
+		// Verify no extra branches appeared
+		for name := range afterMap {
+			if !beforeMap[name] {
+				rt.Fatalf("Branch %q appeared after reopen but didn't exist before", name)
+			}
+		}
+
+		// Verify HEAD state is restored
+		currentBranch, isDetached, err := store2.CurrentBranch()
+		if err != nil {
+			rt.Fatalf("CurrentBranch after reopen failed: %v", err)
+		}
+
+		if isDetached != expectedDetached {
+			rt.Fatalf("HEAD detached state mismatch: got %v, want %v", isDetached, expectedDetached)
+		}
+
+		if !expectedDetached && currentBranch != expectedBranch {
+			rt.Fatalf("Current branch mismatch: got %q, want %q", currentBranch, expectedBranch)
+		}
+
+		// Verify HEAD commit is restored
+		if store2.Head() != expectedHead {
+			rt.Fatalf("HEAD commit mismatch: got %s, want %s", store2.Head().String(), expectedHead.String())
 		}
 	})
 }
